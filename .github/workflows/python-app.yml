@@ -19,9 +19,9 @@ jobs:
       with:
         python-version: 3.11
         
-    - name: Install pkg
+    - name: Install dependencies
       run: |
-        pip install pyinstall
+        pip install pyinstaller
       
     - name: Execute pyinstaller
       run: python build.py
