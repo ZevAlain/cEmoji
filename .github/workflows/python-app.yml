@@ -21,7 +21,7 @@ jobs:
         
     - name: Install pkg
       run: |
-        pip install -r requirements.txt
+        pip install pyinstall
       
     - name: Execute pyinstaller
       run: python build.py
@@ -29,5 +29,16 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v2
       with:
-        name: cEmoji
+        name: cEmoji-exe
         path: dist/cEmoji.exe
+
+    - name: Install GitHub CLI 
+      run: |
+        scoop install gh
+
+    - name: Create Release and Upload Artifact
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
+      run: | 
+        gh release create v$(Get-Date -Format yyyyMMddHHmmss)
+        gh release upload v$(Get-Date -Format yyyyMMddHHmmss) cEmoji-exe
