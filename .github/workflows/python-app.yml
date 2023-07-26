@@ -22,8 +22,8 @@ jobs:
     - name: Install dependencies
       run: |
         pip install pyinstaller
-        sys.path.append('/path/to/pyinstaller')
-      
+        $env:PATH += ";$(pip show pyinstaller | Select-String -Pattern 'Location: ' | %{$_ -replace 'Location: ', ''})\pyinstaller"
+
     - name: Execute pyinstaller
       run: python build.py
       
