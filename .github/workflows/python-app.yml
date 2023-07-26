@@ -22,11 +22,10 @@ jobs:
     - name: Install dependencies
       run: |
         pip install pyinstaller
-        $env:PATH += ";$(pip show pyinstaller | Select-String -Pattern 'Location: ' | %{$_ -replace 'Location: ', ''})\pyinstaller"
 
     - name: Execute pyinstaller
-      run: python build.py
-      
+      run: pyinstaller cEmoji.py
+
     - name: Upload artifact
       uses: actions/upload-artifact@v2
       with:
