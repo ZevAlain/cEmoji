@@ -21,7 +21,7 @@ jobs:
         
     - name: Install dependencies
       run: |
-        pip install pyinstaller
+        pip install pyinstaller -v
       
     - name: Execute pyinstaller
       run: python build.py
