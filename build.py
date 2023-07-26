@@ -1,12 +1,12 @@
-# import pyinstaller
+import pyinstaller
 import os
 import sys
 
 print(sys.path)
 
-# pyinstaller.configure()
+pyinstaller.configure()
 
-# os.system('python cEmoji.py') # 运行cEmoji.py生成必要文件
+os.system('python cEmoji.py') # 运行cEmoji.py生成必要文件
 
-# pyinstaller.build_main('./cEmoji.py') # 用pyinstaller打包
+pyinstaller.build_main('./cEmoji.py') # 用pyinstaller打包
 

@@ -21,7 +21,8 @@ jobs:
 
     - name: Install dependencies
       run: |
-        pip install pyinstaller -v
+        pip install pyinstaller
+        sys.path.append('/path/to/pyinstaller')
       
     - name: Execute pyinstaller
       run: python build.py
