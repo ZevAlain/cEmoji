@@ -1,5 +1,3 @@
-pyinstaller
-shutil
-PyQt5
-PIL
-clipboard
+PyQt5=5.15.9
+clipboard=0.0.4
+
