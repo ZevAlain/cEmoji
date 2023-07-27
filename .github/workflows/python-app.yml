@@ -30,10 +30,11 @@ jobs:
     - name: Create Release and Upload Release Asset
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: V0.${{ github.run_id }}.dev
-        name: V0.${{ github.run_id }}.dev
+        tag_name: V0.${{ github.run_id }}
+        name: Release V0.${{ github.run_id }}
+        body: TODO New Release.
         draft: false
-        prerelease: true
+        prerelease: false
         files: |
           dist/cEmoji.exe
           LICENSE
