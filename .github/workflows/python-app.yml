@@ -33,10 +33,9 @@ jobs:
         path: dist/cEmoji.exe
 
     - name: Install Scoop
-      run: |
-        Set-ExecutionPolicy RemoteSigned -scope CurrentUser
-        Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
-        scoop install --global scoop
+      uses: yokawasa/action-scoop@v1
+      with:
+          scoop_version: '1.0.252'
 
     - name: Install GitHub CLI 
       run: scoop install gh
