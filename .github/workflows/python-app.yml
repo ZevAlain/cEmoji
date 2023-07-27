@@ -1,4 +1,4 @@
-name: Build Windows exe
+name: Build cEmoji Windows exe
 
 on: 
   push:
@@ -6,9 +6,7 @@ on:
       - main
 
 jobs:
-
   build_exe:
-
     runs-on: windows-latest
 
     steps:
