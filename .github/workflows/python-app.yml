@@ -32,9 +32,13 @@ jobs:
         name: cEmoji-exe
         path: dist/cEmoji.exe
 
-    - name: Install GitHub CLI 
+    - name: Install Scoop
       run: |
-        scoop install gh
+        Set-ExecutionPolicy RemoteSigned -scope CurrentUser
+        Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
+    
+    - name: Install GitHub CLI 
+      run: scoop install gh
 
     - name: Create Release and Upload Artifact
       env:
