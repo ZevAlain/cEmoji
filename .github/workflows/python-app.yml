@@ -30,7 +30,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: cEmoji-exe
-        path: dist/cEmoji.exe
+        path: ./dist/cEmoji.exe
 
     - name: Install Scoop
       run: |
