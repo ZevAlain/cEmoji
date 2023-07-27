@@ -26,7 +26,7 @@ jobs:
     - name: Execute pyinstaller
       run: pyinstaller.exe --onefile --noconsole --icon=my_icon.ico .\cEmoji.py
 
-    - name: show dist
+    - name: Show dist
       run: dir dist
 
     - name: Create Release and Upload Release Asset
@@ -37,5 +37,5 @@ jobs:
         draft: false
         prerelease: true
         files: |
-          dist\cEmoji.exe
+          dist/cEmoji.exe
           LICENSE
