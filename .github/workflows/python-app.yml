@@ -31,11 +31,11 @@ jobs:
 
     - name: Create Release and Upload Release Asset
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
       with:
-        tag_name: V0.1
-        name: V0.1
+        tag_name: V0.${{ github.run_id }}.dev
+        name: V0.${{ github.run_id }}.dev
         draft: false
+        prerelease: true
         files: |
           dist\cEmoji.exe
           LICENSE
