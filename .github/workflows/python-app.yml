@@ -24,7 +24,7 @@ jobs:
         pip install pyinstaller
 
     - name: Execute pyinstaller
-      run: pyinstaller cEmoji.py
+      run: pyinstaller.exe --onefile --noconsole --icon=my_icon.ico .\cEmoji.py
 
     - name: show dist
       run: dir dist
