@@ -21,7 +21,7 @@ jobs:
       run: |
         pip install pyinstaller
         pip install shutil
-        pip install PIL
+        pip install pillow
         pip install -r requirements.txt
 
     - name: Execute pyinstaller
