@@ -29,24 +29,10 @@ jobs:
     - name: show dist
       run: dir dist
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: cEmoji-exe
-        path: dist/cEmoji.exe
-
-    - name: Install Scoop
-      run: |
-        Set-ExecutionPolicy RemoteSigned -scope CurrentUser
-        Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
-        scoop install --global scoop
-
-    - name: Install GitHub CLI 
-      run: scoop install gh
-
-    - name: Create Release and Upload Artifact
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
-      run: | 
-        gh release create v$(Get-Date -Format yyyyMMddHHmmss)
-        gh release upload v$(Get-Date -Format yyyyMMddHHmmss) cEmoji-exe
+    - name: upload release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/cEmoji.exe
+            LICENSE
