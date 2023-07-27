@@ -35,8 +35,8 @@ jobs:
     - name: Install Scoop
       run: |
         Set-ExecutionPolicy RemoteSigned -scope CurrentUser
-        Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
-    
+        Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh') -useb
+
     - name: Install GitHub CLI 
       run: scoop install gh
 
