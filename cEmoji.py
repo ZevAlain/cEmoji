@@ -105,8 +105,10 @@ class ImageViewer(QWidget):
 
            # 创建缩略图
            image = Image.open(dest_filename)
+           if image.mode not in ["RGB", "RGBA"]:
+              image = image.convert("RGB")
            image.thumbnail((50, 50))
-           image.save(emoji_small_folder + os.path.basename(filename))
+           image.save(emoji_small_folder + os.path.basename(filename), quality=100)
 
        self.display_emoji()
 
