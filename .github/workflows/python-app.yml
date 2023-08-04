@@ -21,7 +21,6 @@ jobs:
       run: |
         pip install pyinstaller
         pip install shutil
-        pip install pillow
         pip install -r requirements.txt
 
     - name: Execute pyinstaller
@@ -35,7 +34,8 @@ jobs:
       with:
         tag_name: V0.${{ github.run_id }}
         name: Release V0.${{ github.run_id }}
-        body: TODO New Release.
+        # body: TODO New Release.
+        body_path: update.md
         draft: false
         prerelease: false
         files: |

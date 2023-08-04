@@ -9,7 +9,7 @@ from PyQt5 import QtCore  # Add this line to import QtCore
 from PIL import Image
 import my_icon
 import base64
- 
+
 # 获取当前应用程序的路径
 # current_path = os.path.dirname(os.path.realpath(__file__))
 current_path = os.path.dirname(sys.executable)
