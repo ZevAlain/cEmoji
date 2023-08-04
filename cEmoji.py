@@ -24,7 +24,7 @@ if not os.path.exists(emoji_folder):
 if not os.path.exists(emoji_small_folder):
     os.makedirs(emoji_small_folder)
 
-
+# 缺少注释
 class ClickableLabel(QLabel):
     def __init__(self, *args, **kwargs):
         super(ClickableLabel, self).__init__(*args, **kwargs)
@@ -56,10 +56,10 @@ class ClickableLabel(QLabel):
 class ImageViewer(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('cEmoji')
+        self.setWindowTitle('cEmoji') # 设置title
         self.setFixedSize(500, 600)  # 设置窗口大小为400x600像素
 
-        # 设置标题栏图标
+        # 设置标题栏图标，创建临时ico文件。使用完毕删除
         with open('tmp.ico', 'wb') as tmp:
             tmp.write(base64.b64decode(my_icon.Icon().img))
 
@@ -178,6 +178,7 @@ class ImageViewer(QWidget):
 
 
 if __name__ == "__main__":
+    # 主界面初始化
     app = QApplication(sys.argv)
 
     image_viewer = ImageViewer()
