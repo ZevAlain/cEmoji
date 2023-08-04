@@ -2,10 +2,12 @@ import os
 import sys
 import shutil
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QFileDialog, QScrollArea, QLabel, QSizePolicy, QLineEdit, QMessageBox, QGridLayout
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import Qt
 from PIL import Image
 import clipboard
+import my_icon
+import base64
 
 # 获取当前应用程序的路径
 # current_path = os.path.dirname(os.path.realpath(__file__))
@@ -52,7 +54,16 @@ class ClickableLabel(QLabel):
 class ImageViewer(QWidget):
    def __init__(self):
        super().__init__()
+       self.setWindowTitle('cEmoji')
        self.setFixedSize(500, 600) # 设置窗口大小为400x600像素
+
+       # 设置标题栏图标
+       with open('tmp.ico','wb') as tmp:
+           tmp.write(base64.b64decode(my_icon.Icon().img))
+
+       icon = QIcon('tmp.ico')
+       self.setWindowIcon(icon)
+       os.remove('tmp.ico')
 
        # 创建主布局
        self.main_layout = QVBoxLayout()
