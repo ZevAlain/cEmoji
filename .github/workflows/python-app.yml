@@ -29,8 +29,8 @@ jobs:
     - name: Show dist
       run: dir dist
 
-    - name: zip All files
-      uses: TheDoctor0/zip-release@0.7.1
+    - name: Archive Release
+      uses: thedoctor0/zip-release@0.7.1
       with:
         type: 'zip'
         filename: 'cEmoji.zip'
