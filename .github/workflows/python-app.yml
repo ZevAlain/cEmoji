@@ -40,5 +40,5 @@ jobs:
         prerelease: false
         files: |
           dist/cEmoji.exe
-          emoji_Demo/小黄鸭职场系列.zip
+          emoji_Demo/LYDuckInWork.zip
           LICENSE

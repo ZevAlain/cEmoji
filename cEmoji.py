@@ -4,7 +4,7 @@ import sys
 import shutil
 import time
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QFileDialog, QScrollArea, \
-    QLabel, QSizePolicy, QLineEdit, QMessageBox, QGridLayout
+    QLabel, QSizePolicy, QLineEdit, QMessageBox, QGridLayout, QHBoxLayout
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import Qt
 from PyQt5 import QtCore  # Add this line to import QtCore
@@ -83,15 +83,33 @@ class ImageViewer(QWidget):
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
 
-        # 添加始终置顶按钮
-        self.always_on_top_button = QPushButton('始终置顶', self)
-        self.always_on_top_button.clicked.connect(self.toggle_always_on_top)
-        self.always_on_top_button.setCheckable(True)  # 让按钮具有可选中状态
-        self.main_layout.addWidget(self.always_on_top_button)
+        # 添加按钮布局
+        self.buttons_layout = QHBoxLayout()
+        self.main_layout.addLayout(self.buttons_layout)
 
-        # 创建上传按钮
-        self.upload_button = QPushButton('上传', self)
-        self.upload_button.clicked.connect(self.show_upload_dialog)
+        # 在按钮布局中添加三个按钮
+        self.always_on_top_button = QPushButton('始终置顶')
+        # 设置为可检查按钮  
+        self.always_on_top_button.setCheckable(True)
+        self.manage_button = QPushButton('管理')
+        # 设置为可检查按钮  
+        self.manage_button.setCheckable(True)
+
+        self.upload_button = QPushButton('上传')
+
+        self.buttons_layout.addWidget(self.always_on_top_button)
+        self.buttons_layout.addWidget(self.upload_button) 
+        self.buttons_layout.addWidget(self.manage_button)
+
+        # 设置按钮策略
+        self.always_on_top_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.upload_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.manage_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        # 连接信号和槽 
+        self.always_on_top_button.clicked.connect(self.toggle_always_on_top)
+        self.upload_button.clicked.connect(self.show_upload_dialog) 
+        self.manage_button.clicked.connect(self.show_manage_dialog)
 
         # 创建搜索框
         self.search_bar = QLineEdit(self)
@@ -161,11 +179,22 @@ class ImageViewer(QWidget):
             pass
 
     def upload_image(self):
+        # 创建进度条
+        # progress = QProgressDialog("正在上传...", "取消上传", 0, 100, self)
+        # progress.setWindowModality(Qt.WindowModal)
+        # progress.setWindowTitle("上传进度")
+
         # 打开文件选择框
         filenames, _ = QFileDialog.getOpenFileNames(
             self, "Select image", "", "Image files (*.jpg *.png)")
 
-        for filename in filenames:
+        for i, filename in enumerate(filenames):
+            if not filename:
+                continue
+            # 设置进度条的值
+            # progress_value = int(i / len(filenames) * 100)
+            # progress.setValue(progress_value)
+            
             dest_filename = emoji_folder + os.path.basename(filename)
             # existsFileList = []
 
@@ -187,16 +216,28 @@ class ImageViewer(QWidget):
             image.save(emoji_small_folder +
                        os.path.basename(filename), quality=100)
 
+            # if progress.wasCanceled():
+            #     break
+            
         self.display_emoji()
-    
+        # progress.close()
+
     def upload_zip(self):
+        # # 创建进度条
+        # progress = QProgressDialog("正在上传...", "取消上传", 0, 100, self)
+        # progress.setWindowModality(Qt.WindowModal)
+        # progress.setWindowTitle("上传进度")
         # 选择多个zip文件
         filenames, _ = QFileDialog.getOpenFileNames(self, "Select ZIP", "", "ZIP files (*.zip)")
 
         # 遍历zip
-        for filename in filenames:
+        for i, filename in enumerate(filenames):
             if not filename:
                 continue
+
+            # # 设置进度条的值
+            # progress_value = int(i / len(filenames) * 100)
+            # progress.setValue(progress_value)
 
             # 创建临时文件夹
             tmp_folder = f"cEmoji_tmp_{int(time.time())}"
@@ -237,7 +278,17 @@ class ImageViewer(QWidget):
             # 删除临时文件夹
             shutil.rmtree(tmpEmojiPath)
 
+            # if progress.wasCanceled():
+            #     break
+            
         self.display_emoji()
+        # progress.close()
+
+    def show_manage_dialog(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("提示")
+        msg.setText("待实现")
+        msg.exec_()
 
     def display_emoji(self):
         # 清除当前显示的所有图片
