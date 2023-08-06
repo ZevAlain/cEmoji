@@ -1,4 +1,5 @@
-from pathlib import Path
+from patoolib import programs
+import patoolib
 import shutil
 import time
 from PyQt5.QtWidgets import QFileDialog, QMessageBox

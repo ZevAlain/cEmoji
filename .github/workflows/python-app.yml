@@ -21,6 +21,7 @@ jobs:
       run: |
         pip install pyinstaller
         pip install shutil
+        pip install patool
         pip install -r requirements.txt
 
     - name: Execute pyinstaller
@@ -37,7 +38,7 @@ jobs:
         # body: TODO New Release.
         body_path: update.md
         draft: false
-        prerelease: false
+        prerelease: true
         files: |
           dist/cEmoji.exe
           emoji_Demo/LYDuckInWork.zip
