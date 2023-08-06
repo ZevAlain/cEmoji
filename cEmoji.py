@@ -1,12 +1,15 @@
 import os
+from pathlib import Path
 import sys
 import shutil
+import time
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QFileDialog, QScrollArea, \
-    QLabel, QSizePolicy, QLineEdit, QMessageBox, QGridLayout, QMainWindow
+    QLabel, QSizePolicy, QLineEdit, QMessageBox, QGridLayout
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import Qt
 from PyQt5 import QtCore  # Add this line to import QtCore
 from PIL import Image
+import patoolib
 import my_icon
 import base64
 
@@ -17,6 +20,15 @@ current_path = os.path.dirname(sys.executable)
 # 设置文件夹路径
 emoji_folder = os.path.join(current_path, "emoji/")
 emoji_small_folder = os.path.join(current_path, "emoji_small/")
+
+# 计算个数
+def getCountFromEmoji_small():
+    count = 0
+    for _, _, files in os.walk(emoji_small_folder):
+        count += len(files)
+    return count
+
+# print(emoji_small_folder)
 
 # 如果文件夹不存在，则创建文件夹
 if not os.path.exists(emoji_folder):
@@ -78,8 +90,8 @@ class ImageViewer(QWidget):
         self.main_layout.addWidget(self.always_on_top_button)
 
         # 创建上传按钮
-        self.upload_button = QPushButton('导入图片', self)
-        self.upload_button.clicked.connect(self.upload_image)
+        self.upload_button = QPushButton('上传', self)
+        self.upload_button.clicked.connect(self.show_upload_dialog)
 
         # 创建搜索框
         self.search_bar = QLineEdit(self)
@@ -89,7 +101,8 @@ class ImageViewer(QWidget):
         self.search_bar.setStyleSheet("background-color: transparent;")
 
         # 设置搜索框的占位文本
-        self.search_bar.setPlaceholderText("输入表情标题搜索")
+        searchMessage = "输入表情标题搜索(当前表情数量: " + str(getCountFromEmoji_small()) + ")"
+        self.search_bar.setPlaceholderText(searchMessage)
 
         # 添加上传按钮和搜索框到主布局
         self.main_layout.addWidget(self.upload_button)
@@ -130,6 +143,23 @@ class ImageViewer(QWidget):
         # 更新窗口标志以应用更改
         self.show()
 
+    def show_upload_dialog(self):
+        msg_box = QMessageBox(self)
+        msg_box.setText("请选择上传类型:")
+        msg_box.setWindowTitle("cEmoji")
+        button_image = msg_box.addButton("图片", QMessageBox.YesRole)
+        button_zip = msg_box.addButton("压缩包", QMessageBox.NoRole)
+        cancel_button = msg_box.addButton("取消上传", QMessageBox.RejectRole)
+
+        ret = msg_box.exec_()
+
+        if msg_box.clickedButton() == button_image:
+            self.upload_image()
+        elif msg_box.clickedButton() == button_zip:
+            self.upload_zip()
+        else:
+            pass
+
     def upload_image(self):
         # 打开文件选择框
         filenames, _ = QFileDialog.getOpenFileNames(
@@ -137,10 +167,13 @@ class ImageViewer(QWidget):
 
         for filename in filenames:
             dest_filename = emoji_folder + os.path.basename(filename)
+            # existsFileList = []
 
             # 检查文件是否存在，如果存在则不复制
             if os.path.exists(dest_filename):
-                QMessageBox.warning(self, 'Warning', 'File already exists.')
+                # 文件存在，警告消息输出暂时去除。
+                # existsFileList.append(dest_filename)
+                # QMessageBox.warning(self, 'Warning', 'File already exists.')
                 continue
 
             # 拷贝文件到emoji文件夹
@@ -153,6 +186,56 @@ class ImageViewer(QWidget):
             image.thumbnail((100, 100))
             image.save(emoji_small_folder +
                        os.path.basename(filename), quality=100)
+
+        self.display_emoji()
+    
+    def upload_zip(self):
+        # 选择多个zip文件
+        filenames, _ = QFileDialog.getOpenFileNames(self, "Select ZIP", "", "ZIP files (*.zip)")
+
+        # 遍历zip
+        for filename in filenames:
+            if not filename:
+                continue
+
+            # 创建临时文件夹
+            tmp_folder = f"cEmoji_tmp_{int(time.time())}"
+            tmpEmojiPath = os.path.join(current_path, tmp_folder)
+            os.mkdir(tmpEmojiPath)
+
+            # 解压文件
+            patoolib.extract_archive(filename, outdir=tmpEmojiPath)
+
+            # 遍历临时文件夹
+            for root, dirs, files in os.walk(tmpEmojiPath):
+                for file in files:
+                    # 获取文件路径
+                    file_path = os.path.join(tmpEmojiPath, file)
+                    # 判断后缀名
+                    if Path(file_path).suffix in ['.jpg', '.png']:
+                        dest_filename = emoji_folder + os.path.basename(file)
+                        # existsFileList = []
+
+                        # 检查文件是否存在，如果存在则不复制
+                        if os.path.exists(dest_filename):
+                            #文件存在，警告消息输出暂时去除。
+                            # existsFileList.append(dest_filename)
+                            # QMessageBox.warning(self, 'Warning', 'File already exists.')
+                            continue
+
+                        # 拷贝文件到emoji文件夹
+                        shutil.copy(file_path, dest_filename)
+
+                        # 创建缩略图
+                        image = Image.open(dest_filename)
+                        if image.mode not in ["RGB", "RGBA"]:
+                            image = image.convert("RGB")
+                        image.thumbnail((100, 100))
+                        image.save(emoji_small_folder +
+                                os.path.basename(file), quality=100)
+
+            # 删除临时文件夹
+            shutil.rmtree(tmpEmojiPath)
 
         self.display_emoji()
 
@@ -176,6 +259,9 @@ class ImageViewer(QWidget):
             column = i % 3
             self.scroll_area_layout.addWidget(label, row, column)
 
+        # 更新搜索框的占位文本
+        searchMessage = "输入表情标题搜索(当前表情数量: " + str(getCountFromEmoji_small()) + ")"
+        self.search_bar.setPlaceholderText(searchMessage)
 
 if __name__ == "__main__":
     # 主界面初始化
