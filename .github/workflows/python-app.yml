@@ -30,9 +30,12 @@ jobs:
       run: dir dist
 
     - name: zip All files
-      uses: montudor/action-zip@v1.0.0
+      uses: TheDoctor0/zip-release@0.7.1
       with:
-        args: zip -qq -r cEmoji.zip dist/cEmoji.exe emoji_Demo/小黄鸭职场系列.zip
+        type: 'zip'
+        filename: 'cEmoji.zip'
+        path: 'dist/cEmoji.exe' |
+              'emoji_Demo/小黄鸭职场系列.zip'
 
     - name: Create Release and Upload Release Asset
       uses: softprops/action-gh-release@v1
