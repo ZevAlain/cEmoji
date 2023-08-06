@@ -29,6 +29,11 @@ jobs:
     - name: Show dist
       run: dir dist
 
+    - name: zip All files
+      uses: montudor/action-zip@v1.0.0
+      with:
+        args: zip -qq -r cEmoji.zip dist/cEmoji.exe emoji_Demo/小黄鸭职场系列.zip
+
     - name: Create Release and Upload Release Asset
       uses: softprops/action-gh-release@v1
       with:
@@ -39,6 +44,5 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          dist/cEmoji.exe
-          emoji_Demo/LYDuckInWork.zip
+          cEmoji.zip
           LICENSE
