@@ -1,6 +1,4 @@
 from pathlib import Path
-from patoolib import programs
-import patoolib
 import shutil
 import time
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
@@ -8,8 +6,7 @@ import os
 from PIL import Image
 import patoolib
 import sys
-
-print("patoolib version:", patoolib.__version__)
+import zipfile
 
 # 获取当前应用程序的路径
 # current_path = os.path.dirname(os.path.realpath(__file__))
@@ -20,6 +17,11 @@ emoji_folder = os.path.join(current_path, "emoji/")
 emoji_small_folder = os.path.join(current_path, "emoji_small/")
 
 def upload_image(self):
+    # 创建进度条
+    # progress = QProgressDialog("正在上传...", "取消上传", 0, 100, self)
+    # progress.setWindowModality(Qt.WindowModal)
+    # progress.setWindowTitle("上传进度")
+
     # 打开文件选择框
     filenames, _ = QFileDialog.getOpenFileNames(
         self, "Select image", "", "Image files (*.jpg *.png)")
@@ -27,6 +29,9 @@ def upload_image(self):
     for i, filename in enumerate(filenames):
         if not filename:
             continue
+        # 设置进度条的值
+        # progress_value = int(i / len(filenames) * 100)
+        # progress.setValue(progress_value)
         
         dest_filename = emoji_folder + os.path.basename(filename)
         # existsFileList = []
@@ -49,10 +54,19 @@ def upload_image(self):
         image.save(emoji_small_folder +
                     os.path.basename(filename), quality=100)
 
+        # if progress.wasCanceled():
+        #     break
+
     self.display_emoji()
+    # progress.close()
 
 def upload_zip(self):
+    # # 创建进度条
+    # progress = QProgressDialog("正在上传...", "取消上传", 0, 100, self)
+    # progress.setWindowModality(Qt.WindowModal)
+    # progress.setWindowTitle("上传进度")
     # 选择多个zip文件
+
     filenames, _ = QFileDialog.getOpenFileNames(self, "Select ZIP", "", "ZIP files (*.zip)")
 
     # 遍历zip
@@ -60,13 +74,25 @@ def upload_zip(self):
         if not filename:
             continue
 
+        # # 设置进度条的值
+        # progress_value = int(i / len(filenames) * 100)
+        # progress.setValue(progress_value)
+
         # 创建临时文件夹
         tmp_folder = f"cEmoji_tmp_{int(time.time())}"
         tmpEmojiPath = os.path.join(current_path, tmp_folder)
         os.mkdir(tmpEmojiPath)
 
         # 解压文件
-        patoolib.extract_archive(filename, outdir=tmpEmojiPath)
+        with zipfile.ZipFile(filename, 'r') as zip_ref:
+            for zip_info in zip_ref.infolist():
+                # 使用GBK编码解码文件名（如果适用）
+                extracted_filename = zip_info.filename.encode('cp437').decode('gbk')
+                
+                extracted_path = os.path.join(tmpEmojiPath, extracted_filename)
+                
+                with zip_ref.open(zip_info) as source, open(extracted_path, 'wb') as target:
+                    shutil.copyfileobj(source, target)
 
         # 遍历临时文件夹
         for root, dirs, files in os.walk(tmpEmojiPath):
@@ -99,7 +125,11 @@ def upload_zip(self):
         # 删除临时文件夹
         shutil.rmtree(tmpEmojiPath)
 
+        # if progress.wasCanceled():
+        #     break
+        
     self.display_emoji()
+    # progress.close()
 
 def opt_image_dia(self):
     msg = QMessageBox(self)
