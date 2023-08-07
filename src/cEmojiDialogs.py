@@ -1,4 +1,4 @@
-from patoolib import programs
+from pathlib import Path
 import patoolib
 import shutil
 import time
