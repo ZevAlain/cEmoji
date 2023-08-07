@@ -153,8 +153,11 @@ class ImageViewer(QWidget):
         emoji_images = [f for f in os.listdir(emoji_small_folder) if os.path.isfile(
             os.path.join(emoji_small_folder, f)) and self.search_bar.text().lower() in f.lower()]
 
+        # 按文件创建时间排序
+        sorted_emoji_images = sorted(emoji_images, key=lambda f: os.path.getctime(os.path.join(emoji_small_folder, f)), reverse=True)
+
         # 将图片添加到滚动区域布局
-        for i, img_file in enumerate(emoji_images):
+        for i, img_file in enumerate(sorted_emoji_images):
             label = cEmojiWidgets.ClickableLabel(self)
             # Save the original filename in the object name
             label.setObjectName(img_file)
