@@ -17,11 +17,6 @@ emoji_folder = os.path.join(current_path, "emoji/")
 emoji_small_folder = os.path.join(current_path, "emoji_small/")
 
 def upload_image(self):
-    # 创建进度条
-    # progress = QProgressDialog("正在上传...", "取消上传", 0, 100, self)
-    # progress.setWindowModality(Qt.WindowModal)
-    # progress.setWindowTitle("上传进度")
-
     # 打开文件选择框
     filenames, _ = QFileDialog.getOpenFileNames(
         self, "Select image", "", "Image files (*.jpg *.png)")
@@ -29,9 +24,6 @@ def upload_image(self):
     for i, filename in enumerate(filenames):
         if not filename:
             continue
-        # 设置进度条的值
-        # progress_value = int(i / len(filenames) * 100)
-        # progress.setValue(progress_value)
         
         dest_filename = emoji_folder + os.path.basename(filename)
         # existsFileList = []
@@ -54,20 +46,10 @@ def upload_image(self):
         image.save(emoji_small_folder +
                     os.path.basename(filename), quality=100)
 
-        # if progress.wasCanceled():
-        #     break
-
     self.display_emoji()
-    # progress.close()
 
 def upload_zip(self):
-    # # 创建进度条
-    # progress = QProgressDialog("正在上传...", "取消上传", 0, 100, self)
-    # progress.setWindowModality(Qt.WindowModal)
-    # progress.setWindowTitle("上传进度")
     # 选择多个zip文件
-    
-    up_current_path = current_path
     filenames, _ = QFileDialog.getOpenFileNames(self, "Select ZIP", "", "ZIP files (*.zip)")
 
     # 遍历zip
@@ -75,13 +57,9 @@ def upload_zip(self):
         if not filename:
             continue
 
-        # # 设置进度条的值
-        # progress_value = int(i / len(filenames) * 100)
-        # progress.setValue(progress_value)
-
         # 创建临时文件夹
         tmp_folder = f"cEmoji_tmp_{int(time.time())}"
-        tmpEmojiPath = os.path.join(up_current_path, tmp_folder)
+        tmpEmojiPath = os.path.join(current_path, tmp_folder)
         os.mkdir(tmpEmojiPath)
 
         # 解压文件
@@ -118,11 +96,7 @@ def upload_zip(self):
         # 删除临时文件夹
         shutil.rmtree(tmpEmojiPath)
 
-        # if progress.wasCanceled():
-        #     break
-        
     self.display_emoji()
-    # progress.close()
 
 def opt_image_dia(self):
     msg = QMessageBox(self)

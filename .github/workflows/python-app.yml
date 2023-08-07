@@ -25,7 +25,7 @@ jobs:
         pip install -r requirements.txt
 
     - name: Execute pyinstaller
-      run: pyinstaller.exe --noconsole --onefile --strip --icon=my_icon.ico .\cEmoji.py
+      run: pyinstaller.exe --onefile --strip --icon=my_icon.ico .\cEmoji.py
 
     - name: Show dist
       run: dir dist
