@@ -1,4 +1,5 @@
 from pathlib import Path
+from patoolib import programs
 import patoolib
 import shutil
 import time
@@ -7,6 +8,8 @@ import os
 from PIL import Image
 import patoolib
 import sys
+
+print("patoolib version:", patoolib.__version__)
 
 # 获取当前应用程序的路径
 # current_path = os.path.dirname(os.path.realpath(__file__))
