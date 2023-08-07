@@ -1,3 +1,4 @@
+![cEmoji](https://raw.githubusercontent.com/ZevAlain/cEmoji/main/my_icon.ico)
 # cEmoji
 [![](https://img.shields.io/github/release/ZevAlain/cEmoji.svg)](https://github.com/ZevAlain/cEmoji/releases/latest)
 [![LICENSE](https://img.shields.io/github/license/ZevAlain/cEmoji "LICENSE")](./LICENSE "LICENSE")
