@@ -1,7 +1,7 @@
 import os
 import sys
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QFileDialog, QScrollArea, \
-    QSizePolicy, QLineEdit, QMessageBox, QGridLayout, QHBoxLayout
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QScrollArea, \
+    QSizePolicy, QLineEdit, QMessageBox, QGridLayout, QHBoxLayout, QSystemTrayIcon, QAction, QMenu
 from PyQt5.QtGui import QIcon
 from PyQt5 import QtCore  # Add this line to import QtCore
 import my_icon
