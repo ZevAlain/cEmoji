@@ -27,8 +27,11 @@ jobs:
     - name: Execute pyinstaller
       run: pyinstaller.exe --noconsole --onefile --strip --icon=my_icon.ico .\cEmoji.py
 
-    - name: Show dist
-      run: dir dist
+    - name: Show and zip cEmoji
+      run: |
+        dir dist
+        .\lib\7za.exe a cEmoji.zip .\resource\* dist\cEmoji.exe
+        .\lib\7za.exe a cEmoji_LZMA.7z .\resource\* dist\cEmoji.exe -r -mx=9 -mm=LZMA
 
     - name: Create Release and Upload Release Asset
       uses: softprops/action-gh-release@v1
@@ -40,6 +43,6 @@ jobs:
         draft: false
         prerelease: true
         files: |
-          dist/cEmoji.exe
-          emoji_Demo/LYDuckInWork.zip
+          cEmoji.zip
+          cEmoji_LZMA.7z
           LICENSE
