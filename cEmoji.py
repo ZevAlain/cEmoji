@@ -28,6 +28,10 @@ if not os.path.exists(emoji_small_folder):
 class ImageViewer(QWidget):
     def __init__(self):
         super().__init__()
+
+        ################################################################
+        # 主界面初始化
+        ################################################################
         self.setWindowTitle('cEmoji') # 设置title
         self.setFixedSize(500, 600)  # 设置窗口大小为400x600像素
 
@@ -37,12 +41,37 @@ class ImageViewer(QWidget):
 
         icon = QIcon('tmp.ico')
         self.setWindowIcon(icon)
-        os.remove('tmp.ico')
 
         # 创建主布局
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
 
+        ################################################################
+        # 创建托盘
+        ################################################################
+        # 创建退出操作并连接到退出方法
+        exit_action = QAction('Exit', self)
+        exit_action.triggered.connect(self.on_exit)
+
+        # 创建系统托盘菜单并添加退出操作
+        self.tray_icon_menu = QMenu(self)
+        self.tray_icon_menu.addAction(exit_action)
+
+        # 创建系统托盘图标并设置图标和菜单
+        self.tray_icon = QSystemTrayIcon(self)
+        self.tray_icon.setIcon(QIcon('tmp.ico'))  # 替换为你的应用程序图标路径
+        self.tray_icon.setContextMenu(self.tray_icon_menu)
+        self.tray_icon.setToolTip('cEmoji-Exit请右击')  # 添加此行
+
+        # 连接系统托盘图标的激活事件到对应方法
+        self.tray_icon.activated.connect(self.on_tray_icon_activated)
+
+        # 删除临时图标
+        os.remove('tmp.ico')
+
+        ################################################################
+        # 创建始终置顶，上传，管理按钮
+        ################################################################
         # 添加按钮布局
         self.buttons_layout = QHBoxLayout()
         self.main_layout.addLayout(self.buttons_layout)
@@ -71,6 +100,9 @@ class ImageViewer(QWidget):
         self.upload_button.clicked.connect(self.show_upload_dialog) 
         self.manage_button.clicked.connect(self.show_manage_dialog)
 
+        ################################################################
+        # 创建搜索框
+        ################################################################
         # 创建搜索框
         self.search_bar = QLineEdit(self)
         self.search_bar.textChanged.connect(self.display_emoji)
@@ -86,6 +118,9 @@ class ImageViewer(QWidget):
         self.main_layout.addWidget(self.upload_button)
         self.main_layout.addWidget(self.search_bar)
 
+        ################################################################
+        # 创建搜索框
+        ################################################################
         # 创建滚动区域
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
@@ -104,6 +139,28 @@ class ImageViewer(QWidget):
         # 显示emoji图片
         self.display_emoji()
 
+    ################################################################
+    # 托盘相关处理
+    ################################################################
+    # 重写关闭方法
+    def closeEvent(self, event):
+        event.ignore()
+        self.hide()
+        self.tray_icon.show()
+
+    # 托盘可以右键关闭
+    def on_exit(self):
+        self.tray_icon.hide()
+        QApplication.quit()
+
+    # 托盘图标
+    def on_tray_icon_activated(self, reason):
+        if reason == QSystemTrayIcon.DoubleClick:
+            self.showNormal()
+
+    ################################################################
+    # 始终置顶按钮事件
+    ################################################################
     def toggle_always_on_top(self):
         # 获取当前窗口的“始终置顶”状态
         is_always_on_top = self.windowFlags() & QtCore.Qt.WindowStaysOnTopHint
@@ -121,6 +178,9 @@ class ImageViewer(QWidget):
         # 更新窗口标志以应用更改
         self.show()
 
+    ################################################################
+    # 上传按钮事件
+    ################################################################
     def show_upload_dialog(self):
         msg_box = QMessageBox(self)
         msg_box.setText("请选择上传类型:")
@@ -138,12 +198,18 @@ class ImageViewer(QWidget):
         else:
             pass
 
+    ################################################################
+    # 管理按钮事件
+    ################################################################
     def show_manage_dialog(self):
         msg = QMessageBox(self)
         msg.setWindowTitle("提示")
         msg.setText("待实现")
         msg.exec_()
 
+    ################################################################
+    # 刷新瀑布图区域
+    ################################################################
     def display_emoji(self):
         # 清除当前显示的所有图片
         for i in reversed(range(self.scroll_area_layout.count())):
@@ -172,6 +238,9 @@ class ImageViewer(QWidget):
         searchMessage = "输入表情标题搜索(当前表情数量: " + str(cEmojiUtils.getCountFromEmoji_small(emoji_small_folder)) + ")"
         self.search_bar.setPlaceholderText(searchMessage)
 
+################################################################
+# 主处理
+################################################################
 if __name__ == "__main__":
     # 主界面初始化
     app = QApplication(sys.argv)
