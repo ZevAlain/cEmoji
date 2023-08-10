@@ -36,7 +36,7 @@ jobs:
         .\lib\7za.exe a cEmoji.zip cEmoji -r
         .\lib\7za.exe a cEmoji_LZMA.7z cEmoji -r -mx=9 -mm=LZMA
         .\lib\7za.exe l cEmoji.zip
-        .\lib\7za.exe l cEmoji_LZMA.zip
+        .\lib\7za.exe l cEmoji_LZMA.7z
 
     - name: Create Release and Upload Release Asset
       uses: softprops/action-gh-release@v1
