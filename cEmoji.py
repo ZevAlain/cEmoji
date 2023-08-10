@@ -12,11 +12,11 @@ import src.cEmojiWidgets as cEmojiWidgets
 import src.cEmojiDialogs as cEmojiDialogs
 
 # 排他处理
-app_lock = threading.Lock()
+# app_lock = threading.Lock()
 
-if not app_lock.acquire(False):
-    QMessageBox.information(None, '提示', '进程已经在运行当中，请检查当前任务栏或托盘中是否存在。')
-    sys.exit()
+# if not app_lock.acquire(False):
+#     QMessageBox.information(None, '提示', '进程已经在运行当中，请检查当前任务栏或托盘中是否存在。')
+#     sys.exit()
 
 # 获取当前应用程序的路径
 # current_path = os.path.dirname(os.path.realpath(__file__))
@@ -256,5 +256,5 @@ if __name__ == "__main__":
     image_viewer = ImageViewer()
     image_viewer.show()
 
-    app_lock.release()
+    # app_lock.release()
     sys.exit(app.exec_())

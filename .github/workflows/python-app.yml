@@ -30,8 +30,12 @@ jobs:
     - name: Show and zip cEmoji
       run: |
         dir dist
-        .\lib\7za.exe a cEmoji.zip .\resource\* dist\cEmoji.exe
-        .\lib\7za.exe a cEmoji_LZMA.7z .\resource\* .\dist\cEmoji.exe -r -mx=9 -mm=LZMA
+        rd cEmoji /S /Q
+        mkdir cEmoji
+        xcopy .\resource\* cEmoji\ /E /I
+        copy .\dist\cEmoji.exe cEmoji\
+        .\lib\7za.exe a cEmoji.zip cEmoji -r
+        .\lib\7za.exe a cEmoji_LZMA.7z cEmoji -r -mx=9 -mm=LZMA
 
     - name: Create Release and Upload Release Asset
       uses: softprops/action-gh-release@v1
@@ -40,7 +44,7 @@ jobs:
         name: Release V0.${{ github.run_id }}
         # body: TODO New Release.
         body_path: update.md
-        draft: false
+        draft: true
         prerelease: true
         files: |
           cEmoji.zip
