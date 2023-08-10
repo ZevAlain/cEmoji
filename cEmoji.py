@@ -15,8 +15,8 @@ import src.cEmojiDialogs as cEmojiDialogs
 app_lock = threading.Lock()
 
 if not app_lock.acquire(False):
-        QMessageBox.information(None, '提示', '进程已经在运行当中，请检查当前任务栏或托盘中是否存在。')
-        sys.exit()
+    QMessageBox.information(None, '提示', '进程已经在运行当中，请检查当前任务栏或托盘中是否存在。')
+    sys.exit()
 
 # 获取当前应用程序的路径
 # current_path = os.path.dirname(os.path.realpath(__file__))

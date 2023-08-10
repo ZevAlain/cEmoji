@@ -31,7 +31,7 @@ jobs:
       run: |
         dir dist
         .\lib\7za.exe a cEmoji.zip .\resource\* dist\cEmoji.exe
-        .\lib\7za.exe a cEmoji_LZMA.7z .\resource\* dist\cEmoji.exe -r -mx=9 -mm=LZMA
+        .\lib\7za.exe a cEmoji_LZMA.7z .\resource\* .\dist\cEmoji.exe -r -mx=9 -mm=LZMA
 
     - name: Create Release and Upload Release Asset
       uses: softprops/action-gh-release@v1
