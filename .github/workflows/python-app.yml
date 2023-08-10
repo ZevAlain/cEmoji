@@ -30,7 +30,7 @@ jobs:
     - name: Show and zip cEmoji
       run: |
         dir dist
-        rd cEmoji /S /Q
+        Remove-Item cEmoji -Force -Recurse
         mkdir cEmoji
         xcopy .\resource\* cEmoji\ /E /I
         copy .\dist\cEmoji.exe cEmoji\
