@@ -5,7 +5,6 @@ import time
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
 import os
 from PIL import Image
-import patoolib
 import sys
 import zipfile
 

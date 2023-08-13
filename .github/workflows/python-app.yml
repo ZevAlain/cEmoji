@@ -33,6 +33,8 @@ jobs:
         mkdir cEmoji
         xcopy .\resource\* cEmoji\ /E /I
         copy .\dist\cEmoji.exe cEmoji\
+        mkdir cEmoji\etc
+        copy .\etc\* cEmoji\etc\
         .\lib\7za.exe a cEmoji.zip cEmoji
         .\lib\7za.exe a cEmoji_LZMA.7z cEmoji -m0=lzma2 -mx=9 
         .\lib\7za.exe l cEmoji.zip
