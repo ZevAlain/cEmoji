@@ -33,6 +33,14 @@ if not os.path.exists(emoji_folder):
 if not os.path.exists(emoji_small_folder):
     os.makedirs(emoji_small_folder)
 
+# 改成从ini读取，调用示例
+# etc_emoji_folder = os.path.join(current_path, "etc/")
+# config_etc_emoji_folder = os.path.join(etc_emoji_folder, "cEmoji.ini")
+# 读取ini
+# close_app_flag = cEmojiUtils.read_ini_value(config_etc_emoji_folder, "config", "close_app_flag", "True")
+# 写入ini
+# cEmojiUtils.write_ini_value(config_etc_emoji_folder, "config", "close_app_mode", "True")
+
 # 定义全局变量保存关闭应用程序的标志和关闭应用程序方式
 # True:不提示弹窗 False：提示弹窗
 close_app_flag = False
