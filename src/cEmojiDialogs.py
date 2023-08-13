@@ -1,4 +1,5 @@
 from pathlib import Path
+from PIL import Image, ImageSequence
 import shutil
 import time
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
@@ -16,6 +17,31 @@ current_path = os.path.dirname(sys.executable)
 emoji_folder = os.path.join(current_path, "emoji/")
 emoji_small_folder = os.path.join(current_path, "emoji_small/")
 
+def create_thumbnail_for_gif(image, thumbnail_size, destination_path):
+    frames = [frame.copy() for frame in ImageSequence.Iterator(image)]
+    new_frames = []
+    for frame in frames:
+        frame.thumbnail(thumbnail_size)
+        new_frames.append(frame)
+    new_frames[0].save(destination_path, format='GIF', save_all=True, append_images=new_frames[1:])
+
+def show_upload_dialog(self):
+    msg_box = QMessageBox(self)
+    msg_box.setText("请选择上传类型:")
+    msg_box.setWindowTitle("cEmoji")
+    button_image = msg_box.addButton("图片", QMessageBox.YesRole)
+    button_zip = msg_box.addButton("压缩包", QMessageBox.NoRole)
+    cancel_button = msg_box.addButton("取消上传", QMessageBox.RejectRole)
+
+    ret = msg_box.exec_()
+
+    if msg_box.clickedButton() == button_image:
+        upload_image(self)
+    elif msg_box.clickedButton() == button_zip:
+        upload_zip(self)
+    else:
+        pass
+
 def upload_image(self):
     # 创建进度条
     # progress = QProgressDialog("正在上传...", "取消上传", 0, 100, self)
@@ -23,8 +49,7 @@ def upload_image(self):
     # progress.setWindowTitle("上传进度")
 
     # 打开文件选择框
-    filenames, _ = QFileDialog.getOpenFileNames(
-        self, "Select image", "", "Image files (*.jpg *.png)")
+    filenames, _ = QFileDialog.getOpenFileNames(self, "Select image", "", "Image files (*.jpg *.png *.gif)")
 
     for i, filename in enumerate(filenames):
         if not filename:
@@ -48,11 +73,13 @@ def upload_image(self):
 
         # 创建缩略图
         image = Image.open(dest_filename)
-        if image.mode not in ["RGB", "RGBA"]:
-            image = image.convert("RGB")
-        image.thumbnail((100, 100))
-        image.save(emoji_small_folder +
-                    os.path.basename(filename), quality=100)
+        if image.format == 'GIF':
+            create_thumbnail_for_gif(image, (100, 100), emoji_small_folder + os.path.basename(filename))
+        else:
+            if image.mode not in ["RGB", "RGBA"]:
+                image = image.convert("RGB")
+            image.thumbnail((100, 100))
+            image.save(emoji_small_folder + os.path.basename(filename), quality=100)
 
         # if progress.wasCanceled():
         #     break
@@ -100,7 +127,7 @@ def upload_zip(self):
                 # 获取文件路径
                 file_path = os.path.join(tmpEmojiPath, file)
                 # 判断后缀名
-                if Path(file_path).suffix in ['.jpg', '.png']:
+                if Path(file_path).suffix in ['.jpg', '.png', '.gif']:
                     dest_filename = emoji_folder + os.path.basename(file)
                     # existsFileList = []
 
@@ -116,11 +143,13 @@ def upload_zip(self):
 
                     # 创建缩略图
                     image = Image.open(dest_filename)
-                    if image.mode not in ["RGB", "RGBA"]:
-                        image = image.convert("RGB")
-                    image.thumbnail((100, 100))
-                    image.save(emoji_small_folder +
-                            os.path.basename(file), quality=100)
+                    if image.format == 'GIF':
+                        create_thumbnail_for_gif(image, (100, 100), emoji_small_folder + os.path.basename(file))
+                    else:
+                        if image.mode not in ["RGB", "RGBA"]:
+                            image = image.convert("RGB")
+                        image.thumbnail((100, 100))
+                        image.save(emoji_small_folder + os.path.basename(file), quality=100)
 
         # 删除临时文件夹
         shutil.rmtree(tmpEmojiPath)
