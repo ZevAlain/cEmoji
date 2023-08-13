@@ -1,7 +1,7 @@
 import os
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QScrollArea, \
-    QSizePolicy, QLineEdit, QMessageBox, QGridLayout, QHBoxLayout, QSystemTrayIcon, QAction, QMenu
+    QSizePolicy, QLineEdit, QMessageBox, QGridLayout, QHBoxLayout, QSystemTrayIcon, QAction, QMenu, QCheckBox
 from PyQt5.QtGui import QIcon
 from PyQt5 import QtCore  # Add this line to import QtCore
 import threading
@@ -32,6 +32,12 @@ if not os.path.exists(emoji_folder):
     os.makedirs(emoji_folder)
 if not os.path.exists(emoji_small_folder):
     os.makedirs(emoji_small_folder)
+
+# 定义全局变量保存关闭应用程序的标志和关闭应用程序方式
+# True:不提示弹窗 False：提示弹窗
+close_app_flag = False
+# 0：nothing 1：结束应用程序 2：最小化
+close_app_mode = 0
 
 class ImageViewer(QWidget):
     def __init__(self):
@@ -150,11 +156,53 @@ class ImageViewer(QWidget):
     ################################################################
     # 托盘相关处理
     ################################################################
-    # 重写关闭方法
     def closeEvent(self, event):
-        event.ignore()
-        self.hide()
-        self.tray_icon.show()
+        global close_app_flag, close_app_mode
+
+        # 如果之前选择了关闭方式并勾选了记住选项，则直接使用先前选择的方式
+        if close_app_flag:
+            if close_app_mode == 1:
+                self.on_exit()
+            elif close_app_mode == 2:
+                event.ignore()
+                self.hide()
+                self.tray_icon.show()
+            return
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("要关闭cEmoji吗QAQ")
+        close_button = msg_box.addButton("狠心关闭", QMessageBox.YesRole)
+        minimize_button = msg_box.addButton("最小化，再想想", QMessageBox.NoRole)
+        remember_choice = QCheckBox("记住我的选择")
+        msg_box.setCheckBox(remember_choice)
+
+        # 用于记录选择的按钮
+        clicked_role = [None]
+
+        def button_clicked(button):
+            if button == close_button:
+                clicked_role[0] = "close"
+            elif button == minimize_button:
+                clicked_role[0] = "minimize"
+
+        msg_box.buttonClicked.connect(button_clicked)
+
+        msg_box.exec_()
+
+        if clicked_role[0] == "close":
+            close_app_mode = 1
+            if remember_choice.isChecked():
+                close_app_flag = True
+            self.on_exit()
+        elif clicked_role[0] == "minimize":
+            close_app_mode = 2
+            if remember_choice.isChecked():
+                close_app_flag = True
+            event.ignore()
+            self.hide()
+            self.tray_icon.show()
+        else:
+            event.ignore()
 
     # 托盘可以右键关闭
     def on_exit(self):
@@ -210,9 +258,25 @@ class ImageViewer(QWidget):
     # 管理按钮事件
     ################################################################
     def show_manage_dialog(self):
+        global close_app_flag, close_app_mode
+
         msg = QMessageBox(self)
-        msg.setWindowTitle("提示")
-        msg.setText("待实现")
+        msg.setWindowTitle("管理")
+        reset_button = QPushButton("重置关闭方式")
+        layout = QVBoxLayout()
+        layout.addWidget(reset_button)
+        widget = QWidget()
+        widget.setLayout(layout)
+        msg.layout().addWidget(widget)
+
+        # 重置关闭方式的按钮事件
+        def reset_close_mode():
+            global close_app_flag, close_app_mode
+            close_app_flag = False
+            close_app_mode = 0
+            QMessageBox.information(self, "重置成功", "重置关闭方式成功")
+
+        reset_button.clicked.connect(reset_close_mode)
         msg.exec_()
 
     ################################################################
@@ -233,11 +297,13 @@ class ImageViewer(QWidget):
         # 将图片添加到滚动区域布局
         for i, img_file in enumerate(sorted_emoji_images):
             label = cEmojiWidgets.ClickableLabel(self)
-            # Save the original filename in the object name
             label.setObjectName(img_file)
             label.setPixmap(os.path.join(emoji_small_folder, img_file))
             label.setStyleSheet("position:relative;")
 
+            # 连接信号来刷新图片界面
+            label.image_deleted.connect(self.display_emoji)
+            
             row = i // 3
             column = i % 3
             self.scroll_area_layout.addWidget(label, row, column)
