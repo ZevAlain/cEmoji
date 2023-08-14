@@ -11,6 +11,7 @@ import base64
 import src.cEmojiUtils as cEmojiUtils
 import src.cEmojiWidgets as cEmojiWidgets
 import src.cEmojiDialogs as cEmojiDialogs
+import version
 
 # 排他处理
 # app_lock = threading.Lock()
