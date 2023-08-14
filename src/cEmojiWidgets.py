@@ -93,10 +93,10 @@ class ClickableLabel(QLabel):
         elif event.button() == Qt.RightButton:
             # 右击图片显示红色边框
             for label in self.parent().findChildren(ClickableLabel):
-                label.setStyleSheet("border: 1px solid lightgray;")
+                label.setStyleSheet("border: 0px solid lightgray;")
 
             self.delete_icon = QLabel(self)
-            delete_icon = QApplication.style().standardIcon(QStyle.SP_DialogCloseButton)
+            delete_icon = QApplication.style().standardIcon(QStyle.SP_MessageBoxCritical)
             self.delete_icon.setPixmap(delete_icon.pixmap(20, 20))
             self.delete_icon.setGeometry(self.width() - 20, 0, 20, 20)
             self.delete_icon.setAlignment(Qt.AlignCenter)
