@@ -1,7 +1,8 @@
 import os
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QScrollArea, \
-    QSizePolicy, QLineEdit, QMessageBox, QGridLayout, QHBoxLayout, QSystemTrayIcon, QAction, QMenu, QCheckBox
+    QSizePolicy, QLineEdit, QMessageBox, QGridLayout, QHBoxLayout, QSystemTrayIcon, QAction, QMenu, QCheckBox, \
+    QLabel
 from PyQt5.QtGui import QIcon
 from PyQt5 import QtCore  # Add this line to import QtCore
 import threading
@@ -158,6 +159,10 @@ class ImageViewer(QWidget):
         # 添加滚动区域到主布局
         self.main_layout.addWidget(self.scroll_area)
 
+        # 版本号显示
+        self.version_label = QLabel('版本号：' + version.cEmojiversion, self)
+        self.main_layout.addWidget(self.version_label, alignment=QtCore.Qt.AlignBottom | QtCore.Qt.AlignRight)
+
         # 显示emoji图片
         self.display_emoji()
 
@@ -180,7 +185,7 @@ class ImageViewer(QWidget):
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("要关闭cEmoji吗QAQ")
         close_button = msg_box.addButton("狠心关闭", QMessageBox.YesRole)
-        minimize_button = msg_box.addButton("最小化，再想想", QMessageBox.NoRole)
+        minimize_button = msg_box.addButton("缩小至托盘", QMessageBox.NoRole)
         remember_choice = QCheckBox("记住我的选择")
         msg_box.setCheckBox(remember_choice)
 
