@@ -13,7 +13,7 @@
 - [ ] 自定义制作表情包
 
 ## 使用
-上传图片后在图片瀑布展示区单击，被选中项呈现蓝色边框即可在teams上粘贴。
+参考[WIKI](https://github.com/ZevAlain/cEmoji/wiki)
 
 ## 现存BUG
 - [ ] 点击始终置顶按钮会闪屏
