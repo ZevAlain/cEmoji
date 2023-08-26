@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QSc
     QLabel
 from PyQt5.QtGui import QIcon
 from PyQt5 import QtCore  # Add this line to import QtCore
-import threading
+# import threading
 import my_icon
 import base64
 import src.cEmojiUtils as cEmojiUtils
@@ -117,7 +117,7 @@ class ImageViewer(QWidget):
         self.always_on_top_button.setCheckable(True)
         self.manage_button = QPushButton('管理')
         # 设置为可检查按钮  
-        self.manage_button.setCheckable(True)
+        # self.manage_button.setCheckable(True)
 
         self.upload_button = QPushButton('上传')
 

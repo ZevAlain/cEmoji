@@ -1,7 +1,7 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QLabel, QSizePolicy, QMessageBox, QStyle
-from PyQt5.QtGui import QPixmap, QPainter, QIcon, QCursor, QMovie
-from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
+from PyQt5.QtGui import QPixmap, QCursor
+from PyQt5.QtCore import Qt, pyqtSignal
 import os
 import cEmoji as main
 import subprocess
@@ -82,7 +82,7 @@ class ClickableLabel(QLabel):
                 command_bin = os.path.join(current_path, "bin")
                 
                 command = os.path.join(command_bin, "cpgif.exe")
-                result = subprocess.run([command, image_path], creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+                result = subprocess.Popen([command, image_path], creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
                 
                 if result.returncode != 0:
                     pass
