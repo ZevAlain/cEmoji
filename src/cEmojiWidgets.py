@@ -19,12 +19,16 @@ emoji_small_folder = os.path.join(current_path, "emoji_small/")
 class ClickableLabel(QLabel):
     # 定义一个信号
     image_deleted = pyqtSignal()
+
+    instances = []  # 类变量，用于存储所有的实例
+        
     def __init__(self, *args, **kwargs):
         super(ClickableLabel, self).__init__(*args, **kwargs)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setFixedSize(120, 120)  # 设置缩略图固定尺寸
         self.setStyleSheet("border: 1px solid lightgray;")  # 设置浅色分界线
         self.delete_icon = None  # 添加属性来存储删除图标
+        self.instances.append(self)  # 在创建新的实例时，将其添加到类变量中
         
 
     def setPixmap(self, image_path):
@@ -35,19 +39,8 @@ class ClickableLabel(QLabel):
         super().setPixmap(scaled_pixmap)
 
     def mousePressEvent(self, event):
-        # 删除之前的删除图标
-        if self.delete_icon:
-            self.delete_icon.deleteLater()
-            self.delete_icon = None
-        
-        for label in self.parent().findChildren(ClickableLabel):
-            # 重置其他图片的样式
-            label.setStyleSheet("border: 1px solid lightgray;")
-            # 如果存在删除图标，则删除
-            if label.delete_icon:
-                label.delete_icon.deleteLater()
-                label.delete_icon = None
-
+        # 重置样式
+        self.reset_style()
         super().mousePressEvent(event)
         if event.button() == Qt.LeftButton:
             # 左击图片显示蓝色边框，并且复制该图片
@@ -105,18 +98,51 @@ class ClickableLabel(QLabel):
             for label in self.parent().findChildren(ClickableLabel):
                 label.setStyleSheet("border: 0px solid lightgray;")
 
-            self.delete_icon = QLabel(self)
-            delete_icon = QApplication.style().standardIcon(QStyle.SP_MessageBoxCritical)
-            self.delete_icon.setPixmap(delete_icon.pixmap(20, 20))
-            self.delete_icon.setGeometry(self.width() - 20, 0, 20, 20)
-            self.delete_icon.setAlignment(Qt.AlignCenter)
-            self.delete_icon.setStyleSheet("background-color: red; border-radius: 10px;")
-            self.delete_icon.show()
-            self.delete_icon.setCursor(QCursor(Qt.PointingHandCursor))
-            self.delete_icon.mousePressEvent = self.delete_icon_click
-            self.delete_icon.enterEvent = self.delete_icon_hover
-            self.delete_icon.leaveEvent = self.delete_icon_leave
+            self.add_delete_icon()
             
+
+    # 重置样式
+    def reset_style(self):
+        # 删除之前的删除图标
+        if self.delete_icon:
+            self.delete_icon.deleteLater()
+            self.delete_icon = None
+
+        if self.parent():  # 检查 parent 是否为 None
+            # 重置其他图片的样式
+            for label in self.parent().findChildren(ClickableLabel):
+                label.setStyleSheet("border: 1px solid lightgray;")
+                # 如存在删除图标，则删除
+                if label.delete_icon:
+                    label.delete_icon.deleteLater()
+                    label.delete_icon = None
+
+    @classmethod
+    def add_delete_icons_to_all(cls):
+        for instance in cls.instances:
+            instance.add_delete_icon()
+
+    # 图片的删除icon
+    def add_delete_icon(self):
+        self.delete_icon = QLabel(self)
+        delete_icon = QApplication.style().standardIcon(QStyle.SP_MessageBoxCritical)
+        self.delete_icon.setPixmap(delete_icon.pixmap(20, 20))
+        self.delete_icon.setGeometry(self.width() - 20, 0, 20, 20)
+        self.delete_icon.setAlignment(Qt.AlignCenter)
+        self.delete_icon.setStyleSheet("background-color: red; border-radius: 10px;")
+        self.delete_icon.show()
+        self.delete_icon.setCursor(QCursor(Qt.PointingHandCursor))
+
+        # 读取ini判断删除模式
+        if main.delete_flag == 0:
+            self.delete_icon.mousePressEvent = self.delete_icon_click
+        elif main.delete_flag == 1:
+            self.delete_icon.mousePressEvent = self.delete_to_all_icon_click
+        self.delete_icon.enterEvent = self.delete_icon_hover
+        self.delete_icon.leaveEvent = self.delete_icon_leave
+
+
+    # 删除图片的信号
     def delete_icon_click(self, event):
         # 左击“X”图标的事件处理程序
         if event.button() == Qt.LeftButton:
@@ -138,7 +164,24 @@ class ClickableLabel(QLabel):
                 
                 # 发出信号
                 self.image_deleted.emit()
-                
+
+                self.add_delete_icons_to_all()
+    
+    # 批量删除
+    def delete_to_all_icon_click(self, event):
+        # 左击“X”图标的事件处理程序
+        if event.button() == Qt.LeftButton:
+            image_path = os.path.join(emoji_folder, self.objectName())
+            image_small_path = os.path.join(emoji_small_folder, self.objectName())
+            
+            # 如果文件存在则删除
+            if os.path.exists(image_path):
+                os.remove(image_path)
+            if os.path.exists(image_small_path):
+                os.remove(image_small_path)
+            
+            # 发出信号
+            self.image_deleted.emit()
     
     def delete_icon_hover(self, event):
         # 鼠标悬停在“X”图标上时的事件处理程序
