@@ -82,7 +82,7 @@ class ClickableLabel(QLabel):
                 command_bin = os.path.join(current_path, "bin")
                 
                 command = os.path.join(command_bin, "cpgif.exe")
-                result = subprocess.run([command, image_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                result = subprocess.run([command, image_path], creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
                 
                 if result.returncode != 0:
                     pass
