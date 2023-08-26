@@ -4,6 +4,7 @@ from PyQt5.QtGui import QPixmap, QPainter, QIcon, QCursor, QMovie
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
 import os
 import cEmoji as main
+import subprocess
 
 # 获取当前应用程序的路径
 # current_path = os.path.dirname(os.path.realpath(__file__))
@@ -69,22 +70,31 @@ class ClickableLabel(QLabel):
             image_path = os.path.join(emoji_folder, self.objectName())
 
             if image_path.lower().endswith('.gif'):
-                self.movie = QMovie(image_path)
-                self.setMovie(self.movie)
-                self.movie.start()
+                # self.movie = QMovie(image_path)
+                # self.setMovie(self.movie)
+                # self.movie.start()
 
-                clipboard = QApplication.clipboard()
+                # clipboard = QApplication.clipboard()
 
-                # Convert and copy each frame of the GIF
-                mime_data = QMimeData()
-                frame_images = []
-                for frame_number in range(self.movie.frameCount()):
-                    self.movie.jumpToFrame(frame_number)
-                    frame_image = self.movie.currentPixmap().toImage()
-                    frame_images.append(frame_image)
+                # # Convert and copy each frame of the GIF
+                # mime_data = QMimeData()
+                # frame_images = []
+                # for frame_number in range(self.movie.frameCount()):
+                #     self.movie.jumpToFrame(frame_number)
+                #     frame_image = self.movie.currentPixmap().toImage()
+                #     frame_images.append(frame_image)
 
-                mime_data.setImageData(frame_images)  # Set the list of frame images as MIME data
-                clipboard.setMimeData(mime_data)
+                # mime_data.setImageData(frame_images)  # Set the list of frame images as MIME data
+                # clipboard.setMimeData(mime_data)
+                command_bin = os.path.join(current_path, "bin")
+                
+                command = os.path.join(command_bin, "cpgif.exe")
+                result = subprocess.run([command, image_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                
+                if result.returncode != 0:
+                    pass
+                else:
+                    pass
             else:
                 pixmap = QPixmap(image_path)
                 clipboard = QApplication.clipboard()

@@ -272,26 +272,27 @@ class ImageViewer(QWidget):
     # 管理按钮事件
     ################################################################
     def show_manage_dialog(self):
-        global close_app_flag, close_app_mode
+        # global close_app_flag, close_app_mode
 
-        msg = QMessageBox(self)
-        msg.setWindowTitle("管理")
-        reset_button = QPushButton("重置关闭方式")
-        layout = QVBoxLayout()
-        layout.addWidget(reset_button)
-        widget = QWidget()
-        widget.setLayout(layout)
-        msg.layout().addWidget(widget)
+        # msg = QMessageBox(self)
+        # msg.setWindowTitle("管理")
+        # reset_button = QPushButton("重置关闭方式")
+        # layout = QVBoxLayout()
+        # layout.addWidget(reset_button)
+        # widget = QWidget()
+        # widget.setLayout(layout)
+        # msg.layout().addWidget(widget)
 
-        # 重置关闭方式的按钮事件
-        def reset_close_mode():
-            global close_app_flag, close_app_mode
-            close_app_flag = False
-            close_app_mode = 0
-            QMessageBox.information(self, "重置成功", "重置关闭方式成功")
+        # # 重置关闭方式的按钮事件
+        # def reset_close_mode():
+        #     global close_app_flag, close_app_mode
+        #     close_app_flag = False
+        #     close_app_mode = 0
+        #     QMessageBox.information(self, "重置成功", "重置关闭方式成功")
 
-        reset_button.clicked.connect(reset_close_mode)
-        msg.exec_()
+        # reset_button.clicked.connect(reset_close_mode)
+        # msg.exec_()
+        pass
 
     ################################################################
     # 刷新瀑布图区域
