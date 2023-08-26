@@ -11,6 +11,7 @@ import base64
 import src.cEmojiUtils as cEmojiUtils
 import src.cEmojiWidgets as cEmojiWidgets
 import src.cEmojiDialogs as cEmojiDialogs
+import configparser
 import version
 
 # 排他处理
@@ -44,11 +45,21 @@ if not os.path.exists(emoji_small_folder):
 # cEmojiUtils.write_ini_value(config_etc_emoji_folder, "config", "close_app_mode", "True")
 
 # 定义全局变量保存关闭应用程序的标志和关闭应用程序方式
-# True:不提示弹窗 False：提示弹窗
-close_app_flag = False
-# 0：nothing 1：结束应用程序 2：最小化
-close_app_mode = 0
 
+# 读取ini文件
+config = configparser.ConfigParser()
+config.read('./etc/cEmoji.ini', encoding='utf-8')
+
+# True:不提示弹窗 False：提示弹窗（默认True）
+close_app_flag = config.getboolean('config', 'close_app_flag')
+
+# 0：nothing 1：结束应用程序 2：最小化（默认0）
+close_app_mode = config.getboolean('config', 'close_app_mode')
+
+# 0：非管理模式 1：管理模式（默认0）
+delete_flag = config.getboolean('config', 'delete_flag')
+
+# 主程序
 class ImageViewer(QWidget):
     def __init__(self):
         super().__init__()
@@ -207,11 +218,29 @@ class ImageViewer(QWidget):
             close_app_mode = 1
             if remember_choice.isChecked():
                 close_app_flag = True
+
+                # 修改配置
+                config.set('config', 'close_app_flag', str(close_app_flag))
+                config.set('config', 'close_app_mode', str(close_app_mode))
+
+                # 将更改写回文件
+                with open('./etc/cEmoji.ini', 'w') as configfile:
+                    config.write(configfile)
+
             self.on_exit()
         elif clicked_role[0] == "minimize":
             close_app_mode = 2
             if remember_choice.isChecked():
                 close_app_flag = True
+
+                # 修改配置
+                config.set('config', 'close_app_flag', str(close_app_flag))
+                config.set('config', 'close_app_mode', str(close_app_mode))
+
+                # 将更改写回文件
+                with open('./etc/cEmoji.ini', 'w') as configfile:
+                    config.write(configfile)
+
             event.ignore()
             self.hide()
             self.tray_icon.show()
@@ -272,6 +301,45 @@ class ImageViewer(QWidget):
     # 管理按钮事件
     ################################################################
     def show_manage_dialog(self):
+        # delete_all_icon = cEmojiWidgets.ClickableLabel(self)  # self 是父窗口
+        # delete_all_icon.reset_style()
+        # delete_all_icon.add_delete_icon()
+
+        # 判断是否在管理模式
+        global delete_flag
+        if delete_flag == 0:
+            delete_flag = 1
+
+            # 修改配置
+            config.set('config', 'delete_flag', str(delete_flag))
+
+            # 将更改写回文件
+            with open('./etc/cEmoji.ini', 'w') as configfile:
+                config.write(configfile)
+
+            cEmojiWidgets.ClickableLabel.add_delete_icons_to_all()
+        elif delete_flag == 1:
+            delete_flag = 0
+
+            # 修攍置
+            config.set('config', 'delete_flag', str(delete_flag))
+
+            # 将替换写因文件
+            with open('./etc/cEmoji.ini', 'w') as configfile:
+                config.write(configfile)
+
+            self.display_emoji()
+
+        # # 查找父窗口（self）中所有的 ClickableLabel 对象
+        # clickable_labels = self.findChildren(cEmojiWidgets.ClickableLabel(self))
+
+        # print("我是clickable_labels" + clickable_labels)
+
+        # # 在每一个 ClickableLabel 对象上调用 reset_style 和 add_delete_icon 方法
+        # for label in clickable_labels:
+        #     label.reset_style()
+        #     label.add_delete_icon()
+
         # global close_app_flag, close_app_mode
 
         # msg = QMessageBox(self)
@@ -292,7 +360,8 @@ class ImageViewer(QWidget):
 
         # reset_button.clicked.connect(reset_close_mode)
         # msg.exec_()
-        pass
+
+
 
     ################################################################
     # 刷新瀑布图区域
