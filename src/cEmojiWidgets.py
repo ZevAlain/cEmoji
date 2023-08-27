@@ -140,7 +140,7 @@ class ClickableLabel(QLabel):
         self.delete_icon.show()
         self.delete_icon.setCursor(QCursor(Qt.PointingHandCursor))
 
-        # 读取ini判断删除模式
+        # 读取变delete_flag量判断删除模式
         if main.delete_flag == 0:
             self.delete_icon.mousePressEvent = self.delete_icon_click
         elif main.delete_flag == 1:
@@ -171,8 +171,6 @@ class ClickableLabel(QLabel):
                 
                 # 发出信号
                 self.image_deleted.emit()
-
-                self.add_delete_icons_to_all()
     
     # 批量删除
     def delete_to_all_icon_click(self, event):
