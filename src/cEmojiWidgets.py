@@ -1,10 +1,11 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QLabel, QSizePolicy, QMessageBox, QStyle
-from PyQt5.QtGui import QPixmap, QCursor
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QPixmap, QPainter, QIcon, QCursor, QMovie
+from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
 import os
 import cEmoji as main
 import subprocess
+import configparser
 
 # 获取当前应用程序的路径
 # current_path = os.path.dirname(os.path.realpath(__file__))
@@ -39,6 +40,11 @@ class ClickableLabel(QLabel):
         super().setPixmap(scaled_pixmap)
 
     def mousePressEvent(self, event):
+        # 判断是否在管理模式
+        if self.is_in_manage_mode():
+            print(main.delete_flag)
+            return # 终止该方法后面的处理
+
         # 重置样式
         self.reset_style()
         super().mousePressEvent(event)
@@ -82,7 +88,7 @@ class ClickableLabel(QLabel):
                 command_bin = os.path.join(current_path, "bin")
                 
                 command = os.path.join(command_bin, "cpgif.exe")
-                result = subprocess.Popen([command, image_path], creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+                result = subprocess.run([command, image_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 
                 if result.returncode != 0:
                     pass
@@ -117,6 +123,7 @@ class ClickableLabel(QLabel):
                     label.delete_icon.deleteLater()
                     label.delete_icon = None
 
+    # 批量添加删除图标
     @classmethod
     def add_delete_icons_to_all(cls):
         for instance in cls.instances:
@@ -182,6 +189,21 @@ class ClickableLabel(QLabel):
             
             # 发出信号
             self.image_deleted.emit()
+
+    # 判断是否在管理模式下
+    def is_in_manage_mode(self):
+        # 读取ini文件
+        config = configparser.ConfigParser()
+        config.read('./etc/cEmoji.ini', encoding='utf-8')
+        if config.getint('config', 'delete_flag') == 1:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("⚠你想干嘛⚠")
+            msg.setText("你是不是想发表情Σ(っ °Д °;)っ")
+            msg.setStandardButtons(QMessageBox.Ok)  # 只设置一个 OK 按钮
+
+            msg.exec_()  # 显示对话框并等待用户响应，但不管用户做什么选择，代码都会继续执行
+
+            return True
     
     def delete_icon_hover(self, event):
         # 鼠标悬停在“X”图标上时的事件处理程序

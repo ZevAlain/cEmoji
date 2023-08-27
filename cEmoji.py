@@ -13,12 +13,13 @@ import src.cEmojiWidgets as cEmojiWidgets
 import src.cEmojiDialogs as cEmojiDialogs
 import configparser
 import version
+from configparser import ConfigParser
 
 # 排他处理
 # app_lock = threading.Lock()
 
 # if not app_lock.acquire(False):
-#     QMessageBox.information(None, '提示', '进程已经在运行当中，请检查当前任务栏或托盘中是否存在。')
+#     QMessageBox.information(None, "提示", "进程已经在运行当中，请检查当前任务栏或托盘中是否存在。")
 #     sys.exit()
 
 # 获取当前应用程序的路径
@@ -48,16 +49,16 @@ if not os.path.exists(emoji_small_folder):
 
 # 读取ini文件
 config = configparser.ConfigParser()
-config.read('./etc/cEmoji.ini', encoding='utf-8')
+config.read("./etc/cEmoji.ini", encoding="utf-8")
 
 # True:不提示弹窗 False：提示弹窗（默认True）
-close_app_flag = config.getboolean('config', 'close_app_flag')
+close_app_flag = config.getboolean("config", "close_app_flag")
 
 # 0：nothing 1：结束应用程序 2：最小化（默认0）
-close_app_mode = config.getboolean('config', 'close_app_mode')
+close_app_mode = config.getint("config", "close_app_mode")
 
 # 0：非管理模式 1：管理模式（默认0）
-delete_flag = config.getboolean('config', 'delete_flag')
+delete_flag = config.getint("config", "delete_flag")
 
 # 主程序
 class ImageViewer(QWidget):
@@ -67,14 +68,14 @@ class ImageViewer(QWidget):
         ################################################################
         # 主界面初始化
         ################################################################
-        self.setWindowTitle('cEmoji') # 设置title
+        self.setWindowTitle("cEmoji") # 设置title
         self.setFixedSize(500, 600)  # 设置窗口大小为400x600像素
 
         # 设置标题栏图标，创建临时ico文件。使用完毕删除
-        with open('tmp.ico', 'wb') as tmp:
+        with open("tmp.ico", "wb") as tmp:
             tmp.write(base64.b64decode(my_icon.Icon().img))
 
-        icon = QIcon('tmp.ico')
+        icon = QIcon("tmp.ico")
         self.setWindowIcon(icon)
 
         # 创建主布局
@@ -85,7 +86,7 @@ class ImageViewer(QWidget):
         # 创建托盘
         ################################################################
         # 创建退出操作并连接到退出方法
-        exit_action = QAction('Exit', self)
+        exit_action = QAction("Exit", self)
         exit_action.triggered.connect(self.on_exit)
 
         # 创建系统托盘菜单并添加退出操作
@@ -94,15 +95,15 @@ class ImageViewer(QWidget):
 
         # 创建系统托盘图标并设置图标和菜单
         self.tray_icon = QSystemTrayIcon(self)
-        self.tray_icon.setIcon(QIcon('tmp.ico'))  # 替换为你的应用程序图标路径
+        self.tray_icon.setIcon(QIcon("tmp.ico"))  # 替换为你的应用程序图标路径
         self.tray_icon.setContextMenu(self.tray_icon_menu)
-        self.tray_icon.setToolTip('cEmoji-Exit请右击')  # 添加此行
+        self.tray_icon.setToolTip("cEmoji-Exit请右击")  # 添加此行
 
         # 连接系统托盘图标的激活事件到对应方法
         self.tray_icon.activated.connect(self.on_tray_icon_activated)
 
         # 删除临时图标
-        os.remove('tmp.ico')
+        os.remove("tmp.ico")
 
         ################################################################
         # 创建始终置顶，上传，管理按钮
@@ -112,14 +113,14 @@ class ImageViewer(QWidget):
         self.main_layout.addLayout(self.buttons_layout)
 
         # 在按钮布局中添加三个按钮
-        self.always_on_top_button = QPushButton('始终置顶')
+        self.always_on_top_button = QPushButton("始终置顶")
         # 设置为可检查按钮  
         self.always_on_top_button.setCheckable(True)
-        self.manage_button = QPushButton('管理')
+        self.manage_button = QPushButton("管理")
         # 设置为可检查按钮  
         # self.manage_button.setCheckable(True)
 
-        self.upload_button = QPushButton('上传')
+        self.upload_button = QPushButton("上传")
 
         self.buttons_layout.addWidget(self.always_on_top_button)
         self.buttons_layout.addWidget(self.upload_button) 
@@ -172,7 +173,7 @@ class ImageViewer(QWidget):
         self.main_layout.addWidget(self.scroll_area)
 
         # 版本号显示
-        self.version_label = QLabel('版本号：' + version.cEmojiversion, self)
+        self.version_label = QLabel("版本号：" + version.cEmojiversion, self)
         self.main_layout.addWidget(self.version_label, alignment=QtCore.Qt.AlignBottom | QtCore.Qt.AlignRight)
 
         # 显示emoji图片
@@ -219,13 +220,17 @@ class ImageViewer(QWidget):
             if remember_choice.isChecked():
                 close_app_flag = True
 
-                # 修改配置
-                config.set('config', 'close_app_flag', str(close_app_flag))
-                config.set('config', 'close_app_mode', str(close_app_mode))
+                # # 修改配置
+                # config.set("config", "close_app_flag", str(close_app_flag))
+                # config.set("config", "close_app_mode", str(close_app_mode))
 
-                # 将更改写回文件
-                with open('./etc/cEmoji.ini', 'w') as configfile:
-                    config.write(configfile)
+                # # 将更改写回文件
+                # with open("./etc/cEmoji.ini", "w") as configfile:
+                #     config.write(configfile)
+
+                # 将配置写入ini文件
+                self.write_ini("close_app_flag", str(close_app_flag))
+                self.write_ini("close_app_mode", str(close_app_mode))
 
             self.on_exit()
         elif clicked_role[0] == "minimize":
@@ -233,13 +238,17 @@ class ImageViewer(QWidget):
             if remember_choice.isChecked():
                 close_app_flag = True
 
-                # 修改配置
-                config.set('config', 'close_app_flag', str(close_app_flag))
-                config.set('config', 'close_app_mode', str(close_app_mode))
+                # # 修改配置
+                # config.set("config", "close_app_flag", str(close_app_flag))
+                # config.set("config", "close_app_mode", str(close_app_mode))
 
-                # 将更改写回文件
-                with open('./etc/cEmoji.ini', 'w') as configfile:
-                    config.write(configfile)
+                # # 将更改写回文件
+                # with open("./etc/cEmoji.ini", "w") as configfile:
+                #     config.write(configfile)
+
+                # 将配置写入ini文件
+                self.write_ini("close_app_flag", str(close_app_flag))
+                self.write_ini("close_app_mode", str(close_app_mode))
 
             event.ignore()
             self.hide()
@@ -301,33 +310,40 @@ class ImageViewer(QWidget):
     # 管理按钮事件
     ################################################################
     def show_manage_dialog(self):
-        # delete_all_icon = cEmojiWidgets.ClickableLabel(self)  # self 是父窗口
-        # delete_all_icon.reset_style()
-        # delete_all_icon.add_delete_icon()
-
-        # 判断是否在管理模式
         global delete_flag
+        # 判断是否在管理模式
         if delete_flag == 0:
             delete_flag = 1
 
-            # 修改配置
-            config.set('config', 'delete_flag', str(delete_flag))
+            # # 修改配置
+            # config.set("config", "delete_flag", str(delete_flag))
 
-            # 将更改写回文件
-            with open('./etc/cEmoji.ini', 'w') as configfile:
-                config.write(configfile)
+            # # 将更改写回文件
+            # with open("./etc/cEmoji.ini", "w") as configfile:
+            #     config.write(configfile)
 
+            # 将配置写入ini文件
+            self.write_ini("delete_flag", str(delete_flag))
+
+            # 刷新瀑布图区域
+            self.display_emoji()
+
+             # 批量添加删除图标
             cEmojiWidgets.ClickableLabel.add_delete_icons_to_all()
         elif delete_flag == 1:
             delete_flag = 0
 
-            # 修攍置
-            config.set('config', 'delete_flag', str(delete_flag))
+            # # 修攍置
+            # config.set("config", "delete_flag", str(delete_flag))
 
-            # 将替换写因文件
-            with open('./etc/cEmoji.ini', 'w') as configfile:
-                config.write(configfile)
+            # # 将替换写因文件
+            # with open("./etc/cEmoji.ini", "w") as configfile:
+            #     config.write(configfile)
 
+            # 将配置写入ini文件
+            self.write_ini("delete_flag", str(delete_flag))
+
+            # 刷新瀑布图区域
             self.display_emoji()
 
         # # 查找父窗口（self）中所有的 ClickableLabel 对象
@@ -361,7 +377,41 @@ class ImageViewer(QWidget):
         # reset_button.clicked.connect(reset_close_mode)
         # msg.exec_()
 
+    ################################################################
+    # 将配置写入ini文件
+    # 参数1：self（默认）
+    # 参数2：key
+    # 参数3：value
+    ################################################################
+    def write_ini(self, key, value):
+        # 使用ConfigParser进行常规操作
+        config = ConfigParser()
+        config.read("./etc/cEmoji.ini", encoding="utf-8")
 
+        # 修改某个设置
+        config.set("config", key, value)
+
+        # 将配置写回文件时保留注释
+        with open("./etc/cEmoji.ini", "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        with open("./etc/cEmoji.ini", "w", encoding="utf-8") as f:
+            for line in lines:
+                stripped = line.strip()
+                if "=" in stripped:  # 这是一个配置项
+                    key = stripped.split("=")[0].strip()
+                    section = None
+                    for s in config.sections():
+                        if key in config[s]:
+                            section = s
+                            break
+                    # 如果键已更改，则写入新值，否则写入原始行
+                    if section and config.get(section, key) != stripped.split("=")[1].strip():
+                        f.write(f"{key} = {config.get(section, key)}\n")
+                    else:
+                        f.write(line)
+                else:
+                    f.write(line)
 
     ################################################################
     # 刷新瀑布图区域
