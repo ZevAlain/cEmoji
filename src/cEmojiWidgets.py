@@ -42,7 +42,6 @@ class ClickableLabel(QLabel):
     def mousePressEvent(self, event):
         # 判断是否在管理模式
         if self.is_in_manage_mode():
-            print(main.delete_flag)
             return # 终止该方法后面的处理
 
         # 重置样式
@@ -140,10 +139,12 @@ class ClickableLabel(QLabel):
         self.delete_icon.show()
         self.delete_icon.setCursor(QCursor(Qt.PointingHandCursor))
 
-        # 读取变delete_flag量判断删除模式
-        if main.delete_flag == 0:
+        # 读取ini文件
+        config = configparser.ConfigParser()
+        config.read('./etc/cEmoji.ini', encoding='utf-8')
+        if config.getint('config', 'delete_flag') == 0:
             self.delete_icon.mousePressEvent = self.delete_icon_click
-        elif main.delete_flag == 1:
+        elif config.getint('config', 'delete_flag') == 1:
             self.delete_icon.mousePressEvent = self.delete_to_all_icon_click
         self.delete_icon.enterEvent = self.delete_icon_hover
         self.delete_icon.leaveEvent = self.delete_icon_leave
@@ -188,6 +189,12 @@ class ClickableLabel(QLabel):
             # 发出信号
             self.image_deleted.emit()
 
+            # 重置样式
+            self.reset_style()
+            
+            # 批量添加删除图标
+            self.add_delete_icons_to_all()
+
     # 判断是否在管理模式下
     def is_in_manage_mode(self):
         # 读取ini文件
@@ -195,8 +202,8 @@ class ClickableLabel(QLabel):
         config.read('./etc/cEmoji.ini', encoding='utf-8')
         if config.getint('config', 'delete_flag') == 1:
             msg = QMessageBox(self)
-            msg.setWindowTitle("⚠你想干嘛⚠")
-            msg.setText("你是不是想发表情Σ(っ °Д °;)っ")
+            msg.setWindowTitle("出错啦Σ(っ °Д °;)っ")
+            msg.setText("复制请取消管理模式")
             msg.setStandardButtons(QMessageBox.Ok)  # 只设置一个 OK 按钮
 
             msg.exec_()  # 显示对话框并等待用户响应，但不管用户做什么选择，代码都会继续执行

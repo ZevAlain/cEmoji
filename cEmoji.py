@@ -58,7 +58,7 @@ close_app_flag = config.getboolean("config", "close_app_flag")
 close_app_mode = config.getint("config", "close_app_mode")
 
 # 0：非管理模式 1：管理模式（默认0）
-delete_flag = config.getint("config", "delete_flag")
+delete_flag = 0
 
 # 主程序
 class ImageViewer(QWidget):
@@ -178,6 +178,8 @@ class ImageViewer(QWidget):
 
         # 显示emoji图片
         self.display_emoji()
+
+        self.write_ini("delete_flag", "0")
 
     ################################################################
     # 托盘相关处理
