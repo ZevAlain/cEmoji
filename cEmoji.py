@@ -118,7 +118,7 @@ class ImageViewer(QWidget):
         self.always_on_top_button.setCheckable(True)
         self.manage_button = QPushButton("管理")
         # 设置为可检查按钮  
-        # self.manage_button.setCheckable(True)
+        self.manage_button.setCheckable(True)
 
         self.upload_button = QPushButton("上传")
 
