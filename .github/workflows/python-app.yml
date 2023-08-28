@@ -37,8 +37,6 @@ jobs:
         copy .\etc\* cEmoji\etc\
         mkdir cEmoji\bin
         copy .\bin\* cEmoji\bin\
-        mkdir cEmoji\icon
-        copy .\resource\icon\* cEmoji\icon\
         .\lib\7za.exe a cEmoji.zip cEmoji
         .\lib\7za.exe a cEmoji_LZMA.7z cEmoji -m0=lzma2 -mx=9 
         .\lib\7za.exe l cEmoji.zip
