@@ -29,14 +29,16 @@ class ClickableLabel(QLabel):
         self.setFixedSize(120, 120)  # 设置缩略图固定尺寸
         self.setStyleSheet("border: 1px solid lightgray;")  # 设置浅色分界线
         self.delete_icon = None  # 添加属性来存储删除图标
+        self.gif_icon = None  # 添加属性来存储gif图标
         self.instances.append(self)  # 在创建新的实例时，将其添加到类变量中
-        
 
     def setPixmap(self, image_path):
         pixmap = QPixmap(image_path)
         scaled_pixmap = pixmap.scaled(
             self.width(), self.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
+        if image_path.lower().endswith('.gif'):
+            self.add_gif_icon()
         super().setPixmap(scaled_pixmap)
 
     def mousePressEvent(self, event):
@@ -127,6 +129,20 @@ class ClickableLabel(QLabel):
     def add_delete_icons_to_all(cls):
         for instance in cls.instances:
             instance.add_delete_icon()
+
+    # 图片的gificon
+    def add_gif_icon(self):
+        # 设置icon文件夹路径
+        icon_folder = os.path.join(current_path, "icon")
+        icon_path = os.path.join(current_path, "gif_icon.png")
+        self.gif_icon = QLabel(self)
+        pixmap = QPixmap(icon_path)  # 使用自己的图片路径创建QPixmap
+        self.gif_icon.setPixmap(pixmap)
+        self.gif_icon.setGeometry(0, self.height() - pixmap.height(), pixmap.width(), pixmap.height())  # 放置在左下角
+        self.gif_icon.setAlignment(Qt.AlignCenter)
+        # self.gif_icon.setStyleSheet("background-color: red; border-radius: 10px;")
+        self.gif_icon.show()
+        self.gif_icon.setCursor(QCursor(Qt.PointingHandCursor))
 
     # 图片的删除icon
     def add_delete_icon(self):
