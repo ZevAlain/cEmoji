@@ -134,7 +134,7 @@ class ClickableLabel(QLabel):
     def add_gif_icon(self):
         # 设置icon文件夹路径
         icon_folder = os.path.join(current_path, "icon")
-        icon_path = os.path.join(current_path, "gif_icon.png")
+        icon_path = os.path.join(icon_folder, "gif_icon.png")
         self.gif_icon = QLabel(self)
         pixmap = QPixmap(icon_path)  # 使用自己的图片路径创建QPixmap
         self.gif_icon.setPixmap(pixmap)
