@@ -7,6 +7,9 @@ import os
 from PIL import Image
 import sys
 import zipfile
+import win32clipboard
+import io
+import datetime
 
 # 获取当前应用程序的路径
 # current_path = os.path.dirname(os.path.realpath(__file__))
@@ -158,6 +161,48 @@ def upload_zip(self):
         
     self.display_emoji()
     # progress.close()
+
+def clipboard_button(self):
+
+    # 获取当前日期和时间
+    current_datetime = datetime.datetime.now()
+
+    # 格式化日期和时间为字符串，精确到秒
+    formatted_datetime = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
+    clipboard_filename = "tmp_" + formatted_datetime + ".png"
+
+    clipboard_filename_path = os.path.join(current_path, clipboard_filename)
+
+    # 打开剪贴板
+    win32clipboard.OpenClipboard()
+
+    # 尝试获取位图数据
+    try:
+        bitmap_data = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
+
+        # 将位图数据转换为PIL图像对象
+        pil_image = Image.open(io.BytesIO(bitmap_data))
+        # 保存图像
+        pil_image.save(clipboard_filename_path, "PNG")
+    except TypeError:
+        return
+
+    # 关闭剪贴板
+    win32clipboard.CloseClipboard()
+
+    dest_filename = emoji_folder + os.path.basename(clipboard_filename_path)
+
+    # 拷贝文件到emoji文件夹
+    shutil.copy(clipboard_filename_path, dest_filename)
+
+    # 创建缩略图
+    image = Image.open(dest_filename)
+    if image.mode not in ["RGB", "RGBA"]:
+        image = image.convert("RGB")
+    image.thumbnail((100, 100))
+    image.save(emoji_small_folder + os.path.basename(clipboard_filename_path), quality=100)
+
+    self.display_emoji()
 
 def opt_image_dia(self):
     msg = QMessageBox(self)

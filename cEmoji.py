@@ -297,6 +297,7 @@ class ImageViewer(QWidget):
         msg_box.setWindowTitle("cEmoji")
         button_image = msg_box.addButton("图片", QMessageBox.YesRole)
         button_zip = msg_box.addButton("压缩包", QMessageBox.NoRole)
+        clipboard_button = msg_box.addButton("读取剪切板内容", QMessageBox.ActionRole)
         cancel_button = msg_box.addButton("取消上传", QMessageBox.RejectRole)
 
         ret = msg_box.exec_()
@@ -305,6 +306,8 @@ class ImageViewer(QWidget):
             cEmojiDialogs.upload_image(self)
         elif msg_box.clickedButton() == button_zip:
             cEmojiDialogs.upload_zip(self)
+        elif msg_box.clickedButton() == clipboard_button:
+            cEmojiDialogs.clipboard_button(self)
         else:
             pass
 
