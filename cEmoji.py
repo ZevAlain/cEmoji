@@ -4,8 +4,7 @@ from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QSc
     QSizePolicy, QLineEdit, QMessageBox, QGridLayout, QHBoxLayout, QSystemTrayIcon, QAction, QMenu, QCheckBox, \
     QLabel
 from PyQt5.QtGui import QIcon
-from PyQt5 import QtCore  # Add this line to import QtCore
-# import threading
+from PyQt5 import QtCore
 import my_icon
 import base64
 import src.cEmojiUtils as cEmojiUtils

@@ -22,6 +22,7 @@ jobs:
         pip install pyinstaller
         pip install shutil
         pip install patool
+        pip install pywin32
         pip install -r requirements.txt
 
     - name: Execute pyinstaller
