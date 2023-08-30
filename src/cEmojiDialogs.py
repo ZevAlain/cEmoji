@@ -193,7 +193,7 @@ def clipboard_button(self):
     dest_filename = emoji_folder + os.path.basename(clipboard_filename_path)
 
     # 拷贝文件到emoji文件夹
-    shutil.copy(clipboard_filename_path, dest_filename)
+    shutil.move(clipboard_filename_path, dest_filename)
 
     # 创建缩略图
     image = Image.open(dest_filename)
