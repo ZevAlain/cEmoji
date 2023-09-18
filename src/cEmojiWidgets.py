@@ -140,7 +140,7 @@ class ClickableLabel(QLabel):
         self.gif_icon.setPixmap(pixmap)
         self.gif_icon.setGeometry(0, self.height() - pixmap.height(), pixmap.width(), pixmap.height())  # 放置在左下角
         self.gif_icon.setAlignment(Qt.AlignCenter)
-        self.gif_icon.setStyleSheet("border-radius: 10px;")
+        self.gif_icon.setStyleSheet("border-radius: 0px;")
         self.gif_icon.show()
         self.gif_icon.setCursor(QCursor(Qt.PointingHandCursor))
 
