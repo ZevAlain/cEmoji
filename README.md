@@ -17,3 +17,7 @@
 
 ## 现存BUG
 - [ ] 点击始终置顶按钮会闪屏
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=ZevAlain/cEmoji&type=Date)](https://star-history.com/#ZevAlain/cEmoji&Date)
