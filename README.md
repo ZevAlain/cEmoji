@@ -15,6 +15,13 @@
 ## 使用
 参考[WIKI](https://github.com/ZevAlain/cEmoji/wiki)
 
+## 特别说明
+#### 上传的读取剪切板功能
+1. 使用snipaste对表情包进行截屏(snipaste非唯一选择，但我只测过这个，其他自测)。
+2. 点击上传中的读取剪切板则可以将截屏保存，选择界面就可以进行选择了。
+#### snipaste下载：
+https://www.snipaste.com/download.html
+
 ## 现存BUG
 - [ ] 点击始终置顶按钮会闪屏
 
