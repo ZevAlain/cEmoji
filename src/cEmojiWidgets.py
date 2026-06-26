@@ -212,3 +212,4 @@ class EmojiListWidget(QListView):
             )
         except OSError as error:
             QMessageBox.warning(self, "复制失败", str(error))
+

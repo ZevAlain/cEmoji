@@ -20,6 +20,9 @@ jobs:
       with:
         python-version: '3.11'
 
+    - name: Set up MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -35,12 +38,15 @@ jobs:
       run: |
         Get-ChildItem .\build\cEmoji.dist
         Remove-Item .\cEmoji -Recurse -Force -ErrorAction SilentlyContinue
-        Move-Item .\build\cEmoji.dist .\cEmoji
-        Copy-Item .\resource\* cEmoji\ -Recurse -Force
-        New-Item -ItemType Directory -Force cEmoji\etc | Out-Null
-        Copy-Item .\etc\* cEmoji\etc\ -Force
-        New-Item -ItemType Directory -Force cEmoji\bin | Out-Null
-        Copy-Item .\bin\* cEmoji\bin\ -Force
+        New-Item -ItemType Directory -Force cEmoji | Out-Null
+        Move-Item .\build\cEmoji.dist .\cEmoji\app
+        rc /nologo /fo .\build\cEmoji_launcher.res .\launcher\cEmoji_launcher.rc
+        cl /nologo /O2 /DUNICODE /D_UNICODE /Fo:.\build\cEmoji_launcher.obj /Fe:cEmoji\cEmoji.exe .\launcher\cEmoji_launcher.c .\build\cEmoji_launcher.res /link /SUBSYSTEM:WINDOWS shell32.lib user32.lib
+        Copy-Item .\resource\* cEmoji\app\ -Recurse -Force
+        New-Item -ItemType Directory -Force cEmoji\app\etc | Out-Null
+        Copy-Item .\etc\* cEmoji\app\etc\ -Force
+        New-Item -ItemType Directory -Force cEmoji\app\bin | Out-Null
+        Copy-Item .\bin\* cEmoji\app\bin\ -Force
         .\lib\7za.exe a cEmoji.zip cEmoji
         .\lib\7za.exe a cEmoji_LZMA.7z cEmoji -m0=lzma2 -mx=9 
         .\lib\7za.exe l cEmoji.zip
