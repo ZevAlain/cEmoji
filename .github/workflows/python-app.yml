@@ -28,7 +28,7 @@ jobs:
 
     - name: Build with Nuitka
       run: |
-        python -m nuitka --standalone --windows-console-mode=disable --windows-icon-from-ico=my_icon.ico --enable-plugin=pyside6 --output-dir=build .\cEmoji.py
+        python -m nuitka --standalone --assume-yes-for-downloads --windows-console-mode=disable --windows-icon-from-ico=my_icon.ico --enable-plugin=pyside6 --output-dir=build .\cEmoji.py
         if (!(Test-Path .\build\cEmoji.dist\cEmoji.exe)) { throw "cEmoji.exe was not generated" }
 
     - name: Show and zip cEmoji
