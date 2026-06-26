@@ -34,7 +34,8 @@ jobs:
     - name: Show and zip cEmoji
       run: |
         Get-ChildItem .\build\cEmoji.dist
-        Rename-Item .\build\cEmoji.dist cEmoji
+        Remove-Item .\cEmoji -Recurse -Force -ErrorAction SilentlyContinue
+        Move-Item .\build\cEmoji.dist .\cEmoji
         Copy-Item .\resource\* cEmoji\ -Recurse -Force
         New-Item -ItemType Directory -Force cEmoji\etc | Out-Null
         Copy-Item .\etc\* cEmoji\etc\ -Force

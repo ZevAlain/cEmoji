@@ -25,3 +25,4 @@
 - 修复上传按钮重复加入布局的问题。
 - 修复旧图片标签实例被全局列表强引用导致的潜在内存泄露问题。
 - 修复 PySide6 tooltip 事件中 `QHelpEvent` API 不兼容导致的报错。
+- 修复 GitHub Actions 中 Nuitka standalone 构建因 Dependency Walker 非交互下载确认失败而中断的问题。
