@@ -29,6 +29,7 @@ ICON_DIR = _data_dir("icon")
 BIN_DIR = APP_DIR / "bin"
 ETC_DIR = APP_DIR / "etc"
 CONFIG_FILE = ETC_DIR / "cEmoji.ini"
+PINNED_FILE = ETC_DIR / "pinned.json"
 
 
 def ensure_app_dirs():

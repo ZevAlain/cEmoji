@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
 
 import my_icon
 import version
-import src.cEmojiDialogs as cEmojiDialogs
 import src.cEmojiWidgets as cEmojiWidgets
 from src import emoji_store
 from src.app_paths import ensure_app_dirs
@@ -191,14 +190,16 @@ class ImageViewer(QWidget):
         self.upload_button = QPushButton("上传")
         self.manage_button = QPushButton("管理")
         self.manage_button.setCheckable(True)
+        self.clear_button = QPushButton("清空所有表情包")
 
-        for button in (self.always_on_top_button, self.upload_button, self.manage_button):
+        for button in (self.always_on_top_button, self.upload_button, self.manage_button, self.clear_button):
             button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             self.buttons_layout.addWidget(button)
 
         self.always_on_top_button.clicked.connect(self.toggle_always_on_top)
         self.upload_button.clicked.connect(self.show_upload_dialog)
         self.manage_button.clicked.connect(self.show_manage_dialog)
+        self.clear_button.clicked.connect(self.clear_all_emojis)
 
     def setup_search(self):
         self.search_bar = QLineEdit(self)
@@ -230,7 +231,7 @@ class ImageViewer(QWidget):
         self.footer_layout = QHBoxLayout()
         self.main_layout.addLayout(self.footer_layout)
 
-        self.copy_tip_label = QLabel("鼠标左键单击图片可复制到剪切板", self)
+        self.copy_tip_label = QLabel("鼠标左键单击图片可复制到剪切板，右键可置顶", self)
         self.version_label = QLabel("版本号：" + version.cEmojiversion, self)
         self.footer_layout.addWidget(self.copy_tip_label, alignment=Qt.AlignmentFlag.AlignLeft)
         self.footer_layout.addStretch(1)
@@ -291,6 +292,8 @@ class ImageViewer(QWidget):
             QMessageBox.warning(self, "置顶失败", str(error))
 
     def show_upload_dialog(self):
+        import src.cEmojiDialogs as cEmojiDialogs
+
         cEmojiDialogs.show_upload_dialog(self)
 
     def show_manage_dialog(self):
@@ -302,6 +305,15 @@ class ImageViewer(QWidget):
             self.set_config_value("delete_flag", 0)
             self.emoji_view.set_manage_mode(False)
             self.manage_button.setText("管理")
+
+    def clear_all_emojis(self):
+        ret = QMessageBox.question(self, "确认清空", "确定要清空全部表情包吗？")
+        if ret != QMessageBox.StandardButton.Yes:
+            return
+
+        removed = emoji_store.clear_emojis()
+        self.display_emoji()
+        QMessageBox.information(self, "清空完成", f"已删除 {removed} 个文件")
 
     def set_config_value(self, key, value):
         self.config_service.set_value(key, value)

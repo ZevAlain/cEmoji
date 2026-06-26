@@ -1,11 +1,12 @@
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, Signal, Slot
+from PySide6.QtWidgets import QFileDialog, QLabel, QMessageBox, QProgressDialog
 
-from src import clipboard_service, emoji_store
+from src import emoji_store
 
 
 class ImportSignals(QObject):
-    finished = Signal(int)
+    progress = Signal(int, int, str)
+    finished = Signal(object)
     failed = Signal(str)
 
 
@@ -19,7 +20,7 @@ class ImportWorker(QRunnable):
     @Slot()
     def run(self):
         try:
-            imported = self.import_func(self.filenames)
+            imported = self.import_func(self.filenames, self.signals.progress.emit)
         except Exception as error:
             self.signals.failed.emit(str(error))
             return
@@ -68,24 +69,60 @@ def start_import(self, import_func, filenames):
     self._active_imports.append(worker)
     self.upload_button.setEnabled(False)
 
-    def finish_import(imported):
+    progress_dialog = QProgressDialog("准备导入...", "后台导入中", 0, max(len(filenames), 1), self)
+    progress_dialog.setWindowTitle("导入进度")
+    progress_dialog.setAutoClose(False)
+    progress_dialog.setAutoReset(False)
+    progress_dialog.setCancelButton(None)
+    progress_dialog.setFixedWidth(460)
+    progress_label = QLabel("准备导入...", progress_dialog)
+    progress_label.setFixedWidth(380)
+    progress_dialog.setLabel(progress_label)
+    progress_dialog.show()
+    center_dialog(progress_dialog, self)
+
+    def update_progress(current, total, filename):
+        progress_dialog.setMaximum(max(total, 1))
+        progress_dialog.setValue(current)
+        metrics = progress_label.fontMetrics()
+        progress_label.setText("正在导入：" + metrics.elidedText(filename, Qt.TextElideMode.ElideMiddle, 300))
+
+    def finish_import(summary):
         if worker in self._active_imports:
             self._active_imports.remove(worker)
         self.upload_button.setEnabled(True)
+        progress_dialog.setValue(progress_dialog.maximum())
+        progress_dialog.close()
         self.display_emoji()
+        QMessageBox.information(
+            self,
+            "导入完成",
+            f"成功导入：{summary.imported} 个\n已存在跳过：{summary.skipped} 个\n失败：{summary.failed} 个",
+        )
 
     def fail_import(message):
         if worker in self._active_imports:
             self._active_imports.remove(worker)
         self.upload_button.setEnabled(True)
+        progress_dialog.close()
         QMessageBox.warning(self, "导入失败", message)
 
+    worker.signals.progress.connect(update_progress)
     worker.signals.finished.connect(finish_import)
     worker.signals.failed.connect(fail_import)
     QThreadPool.globalInstance().start(worker)
 
 
+def center_dialog(dialog, parent):
+    parent_geometry = parent.frameGeometry()
+    dialog_geometry = dialog.frameGeometry()
+    dialog_geometry.moveCenter(parent_geometry.center())
+    dialog.move(dialog_geometry.topLeft())
+
+
 def import_clipboard_image(self):
+    from src import clipboard_service
+
     image = clipboard_service.read_clipboard_image()
     if image is None:
         QMessageBox.information(self, "提示", "剪切板中没有可读取的图片")

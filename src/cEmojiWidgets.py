@@ -1,18 +1,21 @@
 import subprocess
 
-from PySide6.QtCore import QAbstractListModel, QEvent, QModelIndex, QRect, QSize, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QApplication, QListView, QMenu, QMessageBox, QStyledItemDelegate, QToolTip
+from PySide6.QtCore import QAbstractListModel, QEvent, QModelIndex, QPersistentModelIndex, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QAction, QColor, QMovie, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import QApplication, QListView, QMenu, QMessageBox, QStyle, QStyledItemDelegate, QToolTip
 
 from src import emoji_store
 from src.app_paths import BIN_DIR
+
+
+ImagePathRole = Qt.ItemDataRole.UserRole + 1
 
 
 class EmojiListModel(QAbstractListModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.image_paths = []
-        self.icon_cache = {}
+        self.pixmap_cache = {}
 
     def rowCount(self, parent=QModelIndex()):
         if parent.isValid():
@@ -25,43 +28,57 @@ class EmojiListModel(QAbstractListModel):
 
         image_path = self.image_paths[index.row()]
         if role == Qt.ItemDataRole.DisplayRole:
-            return image_path.name
-        if role == Qt.ItemDataRole.DecorationRole:
-            cache_key = str(image_path)
-            icon = self.icon_cache.get(cache_key)
-            if icon is None:
-                icon = QIcon(cache_key)
-                self.icon_cache[cache_key] = icon
-            return icon
+            return emoji_store.display_name_for_thumbnail(image_path)
         if role == Qt.ItemDataRole.ToolTipRole:
-            return image_path.name
+            return emoji_store.display_name_for_thumbnail(image_path)
         if role == Qt.ItemDataRole.UserRole:
-            return image_path.name
+            return emoji_store.display_name_for_thumbnail(image_path)
+        if role == ImagePathRole:
+            return str(image_path)
         return None
 
     def set_paths(self, image_paths):
         self.beginResetModel()
         self.image_paths = list(image_paths)
         live_paths = {str(path) for path in self.image_paths}
-        self.icon_cache = {key: icon for key, icon in self.icon_cache.items() if key in live_paths}
+        self.pixmap_cache = {key: pixmap for key, pixmap in self.pixmap_cache.items() if key in live_paths}
         self.endResetModel()
 
     def filename_at(self, index):
         if not index.isValid():
             return None
-        return self.image_paths[index.row()].name
+        return emoji_store.display_name_for_thumbnail(self.image_paths[index.row()])
+
+    def pixmap_at(self, index):
+        if not index.isValid():
+            return QPixmap()
+        image_path = self.image_paths[index.row()]
+        cache_key = str(image_path)
+        pixmap = self.pixmap_cache.get(cache_key)
+        if pixmap is None:
+            pixmap = QPixmap(cache_key)
+            self.pixmap_cache[cache_key] = pixmap
+        return pixmap
 
 
 class EmojiItemDelegate(QStyledItemDelegate):
+    def sizeHint(self, option, index):
+        return QSize(150, 132)
+
     def paint(self, painter, option, index):
-        super().paint(painter, option, index)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        self.paint_background(painter, option)
+        self.paint_image(painter, option, index)
+        self.paint_text(painter, option, index)
+        self.paint_pinned_badge(painter, option, index)
+        self.paint_gif_badge(painter, option, index)
         view = self.parent()
         if not getattr(view, "manage_mode", False):
+            painter.restore()
             return
 
         rect = delete_button_rect(option.rect)
-        painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setBrush(QColor(30, 34, 38, 210))
         painter.setPen(QPen(QColor(255, 255, 255, 80), 1))
         painter.drawRoundedRect(rect, 6, 6)
@@ -70,6 +87,66 @@ class EmojiItemDelegate(QStyledItemDelegate):
         painter.drawLine(rect.left() + margin, rect.top() + margin, rect.right() - margin, rect.bottom() - margin)
         painter.drawLine(rect.right() - margin, rect.top() + margin, rect.left() + margin, rect.bottom() - margin)
         painter.restore()
+
+    def paint_background(self, painter, option):
+        view = self.parent()
+        dark_mode = getattr(view, "theme_mode", "light") == "dark"
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.setBrush(QColor(36, 71, 107) if dark_mode else QColor(216, 235, 255))
+            painter.setPen(QPen(QColor(102, 168, 232) if dark_mode else QColor(77, 157, 232), 1))
+            painter.drawRoundedRect(option.rect.adjusted(2, 2, -2, -2), 4, 4)
+        elif option.state & QStyle.StateFlag.State_MouseOver:
+            painter.setBrush(QColor(36, 40, 48) if dark_mode else QColor(226, 238, 250))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(option.rect.adjusted(2, 2, -2, -2), 4, 4)
+
+    def paint_image(self, painter, option, index):
+        model = index.model()
+        view = self.parent()
+        pixmap = view.animated_pixmap_for_index(index) if hasattr(view, "animated_pixmap_for_index") else QPixmap()
+        if pixmap.isNull():
+            pixmap = model.pixmap_at(index) if hasattr(model, "pixmap_at") else QPixmap(index.data(ImagePathRole))
+        if pixmap.isNull():
+            return
+
+        image_rect = QRect(option.rect.left() + 25, option.rect.top() + 8, 100, 100)
+        draw_size = pixmap.size()
+        if draw_size.width() > image_rect.width() or draw_size.height() > image_rect.height():
+            draw_size.scale(image_rect.size(), Qt.AspectRatioMode.KeepAspectRatio)
+        draw_rect = QRect(0, 0, draw_size.width(), draw_size.height())
+        draw_rect.moveCenter(image_rect.center())
+        painter.drawPixmap(draw_rect, pixmap)
+
+    def paint_text(self, painter, option, index):
+        text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        text_rect = QRect(option.rect.left() + 6, option.rect.top() + 108, option.rect.width() - 12, 20)
+        metrics = painter.fontMetrics()
+        view = self.parent()
+        dark_mode = getattr(view, "theme_mode", "light") == "dark"
+        painter.setPen(QColor(238, 241, 244) if dark_mode else QColor(31, 35, 40))
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, metrics.elidedText(text, Qt.TextElideMode.ElideMiddle, text_rect.width()))
+
+    def paint_gif_badge(self, painter, option, index):
+        image_path = index.data(ImagePathRole) or ""
+        if not image_path.lower().endswith(".gif"):
+            return
+        rect = QRect(option.rect.right() - 42, option.rect.top() + 10, 34, 18)
+        painter.setBrush(QColor(20, 92, 156, 230))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(rect, 5, 5)
+        painter.setPen(QColor(255, 255, 255))
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "GIF")
+
+    def paint_pinned_badge(self, painter, option, index):
+        filename = index.data(Qt.ItemDataRole.UserRole) or ""
+        if not emoji_store.is_pinned(filename):
+            return
+        rect = QRect(option.rect.left() + 8, option.rect.top() + 10, 38, 18)
+        painter.setBrush(QColor(188, 122, 18, 235))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(rect, 5, 5)
+        painter.setPen(QColor(255, 255, 255))
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "置顶")
 
 
 def delete_button_rect(item_rect):
@@ -83,6 +160,16 @@ class EmojiListWidget(QListView):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.manage_mode = False
+        self.theme_mode = "light"
+        self.hover_timer = QTimer(self)
+        self.hover_timer.setSingleShot(True)
+        self.hover_timer.setInterval(1000)
+        self.hover_timer.timeout.connect(self.start_hover_movie)
+        self.hover_gif_index = QPersistentModelIndex()
+        self.hover_gif_path = None
+        self.active_movie_index = QPersistentModelIndex()
+        self.active_movie_path = None
+        self.active_movie = None
         self.emoji_model = EmojiListModel(self)
         self.setModel(self.emoji_model)
         self.setItemDelegate(EmojiItemDelegate(self))
@@ -110,6 +197,7 @@ class EmojiListWidget(QListView):
         self.viewport().update()
 
     def apply_theme(self, mode):
+        self.theme_mode = mode
         if mode == "dark":
             self.setStyleSheet("""
                 QListView { background: #101216; border: 1px solid #30343b; border-radius: 4px; outline: 0; }
@@ -133,8 +221,10 @@ class EmojiListWidget(QListView):
                 QListView::item:selected { background: palette(highlight); color: palette(highlighted-text); }
                 QListView::item:selected:hover { background: palette(highlight); color: palette(highlighted-text); }
             """)
+        self.viewport().update()
 
     def set_emojis(self, image_paths):
+        self.stop_hover_movie()
         self.setUpdatesEnabled(False)
         try:
             self.emoji_model.set_paths(image_paths)
@@ -162,11 +252,89 @@ class EmojiListWidget(QListView):
             return
 
         menu = QMenu(self)
+        pinned = emoji_store.is_pinned(filename)
+        pin_action = QAction("取消置顶" if pinned else "置顶", self)
         delete_action = QAction("删除", self)
+        menu.addAction(pin_action)
+        menu.addSeparator()
         menu.addAction(delete_action)
         action = menu.exec(self.mapToGlobal(position))
-        if action == delete_action:
+        if action == pin_action:
+            self.toggle_pinned(filename, not pinned)
+        elif action == delete_action:
             self.delete_item(filename, confirm=True)
+
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        self.update_hover_gif(event.position().toPoint())
+
+    def leaveEvent(self, event):
+        self.clear_hover_gif()
+        super().leaveEvent(event)
+
+    def update_hover_gif(self, position):
+        index = self.indexAt(position)
+        image_path = index.data(ImagePathRole) if index.isValid() else None
+        if not image_path or not image_path.lower().endswith(".gif"):
+            self.clear_hover_gif()
+            return
+
+        if image_path == self.hover_gif_path:
+            return
+
+        self.hover_timer.stop()
+        self.stop_hover_movie()
+        self.hover_gif_index = QPersistentModelIndex(index)
+        self.hover_gif_path = image_path
+        self.hover_timer.start()
+
+    def clear_hover_gif(self):
+        self.hover_timer.stop()
+        self.hover_gif_index = QPersistentModelIndex()
+        self.hover_gif_path = None
+        self.stop_hover_movie()
+
+    def start_hover_movie(self):
+        if not self.hover_gif_index.isValid() or not self.hover_gif_path:
+            return
+
+        self.stop_hover_movie()
+        self.active_movie_index = QPersistentModelIndex(self.hover_gif_index)
+        self.active_movie_path = self.hover_gif_path
+        self.active_movie = QMovie(self.active_movie_path)
+        self.active_movie.frameChanged.connect(self.update_active_movie_frame)
+        self.active_movie.start()
+        self.update_active_movie_frame()
+
+    def stop_hover_movie(self):
+        if self.active_movie is not None:
+            self.active_movie.stop()
+            self.active_movie.deleteLater()
+        self.active_movie = None
+        active_index = QModelIndex(self.active_movie_index) if self.active_movie_index.isValid() else QModelIndex()
+        self.active_movie_index = QPersistentModelIndex()
+        self.active_movie_path = None
+        if active_index.isValid():
+            self.viewport().update(self.visualRect(active_index))
+
+    def update_active_movie_frame(self):
+        if self.active_movie_index.isValid():
+            self.viewport().update(self.visualRect(QModelIndex(self.active_movie_index)))
+
+    def animated_pixmap_for_index(self, index):
+        image_path = index.data(ImagePathRole) if index.isValid() else None
+        if self.active_movie is None or image_path != self.active_movie_path:
+            return QPixmap()
+        return self.active_movie.currentPixmap()
+
+    def toggle_pinned(self, filename, enabled):
+        emoji_store.set_pinned(filename, enabled)
+        parent = self.parent()
+        if hasattr(parent, "display_emoji"):
+            parent.display_emoji()
+        else:
+            self.set_emojis(emoji_store.list_emojis())
+        self.viewport().update()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
