@@ -1,211 +1,108 @@
-from pathlib import Path
-from PIL import Image, ImageSequence
-import shutil
-import time
-from PyQt5.QtWidgets import QFileDialog, QMessageBox
-import os
-from PIL import Image
-import sys
-import zipfile
-import win32clipboard
-import io
-import datetime
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-# 获取当前应用程序的路径
-# current_path = os.path.dirname(os.path.realpath(__file__))
-current_path = os.path.dirname(sys.executable)
+from src import clipboard_service, emoji_store
 
-# 设置文件夹路径
-emoji_folder = os.path.join(current_path, "emoji/")
-emoji_small_folder = os.path.join(current_path, "emoji_small/")
 
-def create_thumbnail_for_gif(image, thumbnail_size, destination_path):
-    frames = [frame.copy() for frame in ImageSequence.Iterator(image)]
-    new_frames = []
-    for frame in frames:
-        frame.thumbnail(thumbnail_size)
-        new_frames.append(frame)
-    new_frames[0].save(destination_path, format='GIF', save_all=True, append_images=new_frames[1:])
+class ImportSignals(QObject):
+    finished = Signal(int)
+    failed = Signal(str)
+
+
+class ImportWorker(QRunnable):
+    def __init__(self, import_func, filenames):
+        super().__init__()
+        self.import_func = import_func
+        self.filenames = filenames
+        self.signals = ImportSignals()
+
+    @Slot()
+    def run(self):
+        try:
+            imported = self.import_func(self.filenames)
+        except Exception as error:
+            self.signals.failed.emit(str(error))
+            return
+        self.signals.finished.emit(imported)
+
 
 def show_upload_dialog(self):
     msg_box = QMessageBox(self)
     msg_box.setText("请选择上传类型:")
     msg_box.setWindowTitle("cEmoji")
-    button_image = msg_box.addButton("图片", QMessageBox.YesRole)
-    button_zip = msg_box.addButton("压缩包", QMessageBox.NoRole)
-    cancel_button = msg_box.addButton("取消上传", QMessageBox.RejectRole)
+    button_image = msg_box.addButton("图片", QMessageBox.ButtonRole.YesRole)
+    button_zip = msg_box.addButton("压缩包", QMessageBox.ButtonRole.NoRole)
+    clipboard_button = msg_box.addButton("读取剪切板内容", QMessageBox.ButtonRole.ActionRole)
+    msg_box.addButton("取消上传", QMessageBox.ButtonRole.RejectRole)
 
-    ret = msg_box.exec_()
+    msg_box.exec()
 
     if msg_box.clickedButton() == button_image:
         upload_image(self)
     elif msg_box.clickedButton() == button_zip:
         upload_zip(self)
-    else:
-        pass
+    elif msg_box.clickedButton() == clipboard_button:
+        import_clipboard_image(self)
+
 
 def upload_image(self):
-    # 创建进度条
-    # progress = QProgressDialog("正在上传...", "取消上传", 0, 100, self)
-    # progress.setWindowModality(Qt.WindowModal)
-    # progress.setWindowTitle("上传进度")
-
-    # 打开文件选择框
-    filenames, _ = QFileDialog.getOpenFileNames(self, "Select image", "", "Image files (*.jpg *.png *.gif)")
-
-    for i, filename in enumerate(filenames):
-        if not filename:
-            continue
-        # 设置进度条的值
-        # progress_value = int(i / len(filenames) * 100)
-        # progress.setValue(progress_value)
-        
-        dest_filename = emoji_folder + os.path.basename(filename)
-        # existsFileList = []
-
-        # 检查文件是否存在，如果存在则不复制
-        if os.path.exists(dest_filename):
-            # 文件存在，警告消息输出暂时去除。
-            # existsFileList.append(dest_filename)
-            # QMessageBox.warning(self, 'Warning', 'File already exists.')
-            continue
-
-        # 拷贝文件到emoji文件夹
-        shutil.copy(filename, dest_filename)
-
-        # 创建缩略图
-        image = Image.open(dest_filename)
-        if image.format == 'GIF':
-            create_thumbnail_for_gif(image, (100, 100), emoji_small_folder + os.path.basename(filename))
-        else:
-            if image.mode not in ["RGB", "RGBA"]:
-                image = image.convert("RGB")
-            image.thumbnail((100, 100))
-            image.save(emoji_small_folder + os.path.basename(filename), quality=100)
-
-        # if progress.wasCanceled():
-        #     break
-
-    self.display_emoji()
-    # progress.close()
-
-def upload_zip(self):
-    # # 创建进度条
-    # progress = QProgressDialog("正在上传...", "取消上传", 0, 100, self)
-    # progress.setWindowModality(Qt.WindowModal)
-    # progress.setWindowTitle("上传进度")
-    # 选择多个zip文件
-
-    filenames, _ = QFileDialog.getOpenFileNames(self, "Select ZIP", "", "ZIP files (*.zip)")
-
-    # 遍历zip
-    for i, filename in enumerate(filenames):
-        if not filename:
-            continue
-
-        # # 设置进度条的值
-        # progress_value = int(i / len(filenames) * 100)
-        # progress.setValue(progress_value)
-
-        # 创建临时文件夹
-        tmp_folder = f"cEmoji_tmp_{int(time.time())}"
-        tmpEmojiPath = os.path.join(current_path, tmp_folder)
-        os.mkdir(tmpEmojiPath)
-
-        # 解压文件
-        with zipfile.ZipFile(filename, 'r') as zip_ref:
-            for zip_info in zip_ref.infolist():
-                # 使用GBK编码解码文件名（如果适用）
-                extracted_filename = zip_info.filename.encode('cp437').decode('gbk')
-                
-                extracted_path = os.path.join(tmpEmojiPath, extracted_filename)
-                
-                with zip_ref.open(zip_info) as source, open(extracted_path, 'wb') as target:
-                    shutil.copyfileobj(source, target)
-
-        # 遍历临时文件夹
-        for root, dirs, files in os.walk(tmpEmojiPath):
-            for file in files:
-                # 获取文件路径
-                file_path = os.path.join(tmpEmojiPath, file)
-                # 判断后缀名
-                if Path(file_path).suffix in ['.jpg', '.png', '.gif']:
-                    dest_filename = emoji_folder + os.path.basename(file)
-                    # existsFileList = []
-
-                    # 检查文件是否存在，如果存在则不复制
-                    if os.path.exists(dest_filename):
-                        #文件存在，警告消息输出暂时去除。
-                        # existsFileList.append(dest_filename)
-                        # QMessageBox.warning(self, 'Warning', 'File already exists.')
-                        continue
-
-                    # 拷贝文件到emoji文件夹
-                    shutil.copy(file_path, dest_filename)
-
-                    # 创建缩略图
-                    image = Image.open(dest_filename)
-                    if image.format == 'GIF':
-                        create_thumbnail_for_gif(image, (100, 100), emoji_small_folder + os.path.basename(file))
-                    else:
-                        if image.mode not in ["RGB", "RGBA"]:
-                            image = image.convert("RGB")
-                        image.thumbnail((100, 100))
-                        image.save(emoji_small_folder + os.path.basename(file), quality=100)
-
-        # 删除临时文件夹
-        shutil.rmtree(tmpEmojiPath)
-
-        # if progress.wasCanceled():
-        #     break
-        
-    self.display_emoji()
-    # progress.close()
-
-def clipboard_button(self):
-
-    # 获取当前日期和时间
-    current_datetime = datetime.datetime.now()
-
-    # 格式化日期和时间为字符串，精确到秒
-    formatted_datetime = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    clipboard_filename = "tmp_" + formatted_datetime + ".png"
-
-    clipboard_filename_path = os.path.join(current_path, clipboard_filename)
-
-    # 打开剪贴板
-    win32clipboard.OpenClipboard()
-
-    # 尝试获取位图数据
-    try:
-        bitmap_data = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
-
-        # 将位图数据转换为PIL图像对象
-        pil_image = Image.open(io.BytesIO(bitmap_data))
-        # 保存图像
-        pil_image.save(clipboard_filename_path, "PNG")
-    except TypeError:
+    filenames, _ = QFileDialog.getOpenFileNames(self, "Select image", "", "Image files (*.jpg *.jpeg *.png *.gif)")
+    if not filenames:
         return
 
-    # 关闭剪贴板
-    win32clipboard.CloseClipboard()
+    start_import(self, emoji_store.import_images, filenames)
 
-    dest_filename = emoji_folder + os.path.basename(clipboard_filename_path)
 
-    # 拷贝文件到emoji文件夹
-    shutil.move(clipboard_filename_path, dest_filename)
+def upload_zip(self):
+    filenames, _ = QFileDialog.getOpenFileNames(self, "Select ZIP", "", "ZIP files (*.zip)")
+    if not filenames:
+        return
 
-    # 创建缩略图
-    image = Image.open(dest_filename)
-    if image.mode not in ["RGB", "RGBA"]:
-        image = image.convert("RGB")
-    image.thumbnail((100, 100))
-    image.save(emoji_small_folder + os.path.basename(clipboard_filename_path), quality=100)
+    start_import(self, emoji_store.import_zip_files, filenames)
+
+
+def start_import(self, import_func, filenames):
+    worker = ImportWorker(import_func, filenames)
+    if not hasattr(self, "_active_imports"):
+        self._active_imports = []
+    self._active_imports.append(worker)
+    self.upload_button.setEnabled(False)
+
+    def finish_import(imported):
+        if worker in self._active_imports:
+            self._active_imports.remove(worker)
+        self.upload_button.setEnabled(True)
+        self.display_emoji()
+
+    def fail_import(message):
+        if worker in self._active_imports:
+            self._active_imports.remove(worker)
+        self.upload_button.setEnabled(True)
+        QMessageBox.warning(self, "导入失败", message)
+
+    worker.signals.finished.connect(finish_import)
+    worker.signals.failed.connect(fail_import)
+    QThreadPool.globalInstance().start(worker)
+
+
+def import_clipboard_image(self):
+    image = clipboard_service.read_clipboard_image()
+    if image is None:
+        QMessageBox.information(self, "提示", "剪切板中没有可读取的图片")
+        return
+
+    filename = clipboard_service.new_clipboard_filename()
+    try:
+        emoji_store.import_clipboard_image(image, filename)
+    except Exception as error:
+        QMessageBox.warning(self, "导入失败", str(error))
+        return
 
     self.display_emoji()
+
 
 def opt_image_dia(self):
     msg = QMessageBox(self)
     msg.setWindowTitle("提示")
     msg.setText("待实现")
-    msg.exec_()
+    msg.exec()

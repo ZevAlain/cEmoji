@@ -1,3 +1,3 @@
 import os
 
-cEmojiversion = "V0.0.8"
+cEmojiversion = "V0.0.9"

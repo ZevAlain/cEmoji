@@ -1,464 +1,411 @@
+import base64
+import ctypes
+from ctypes import wintypes
 import os
 import sys
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QScrollArea, \
-    QSizePolicy, QLineEdit, QMessageBox, QGridLayout, QHBoxLayout, QSystemTrayIcon, QAction, QMenu, QCheckBox, \
-    QLabel
-from PyQt5.QtGui import QIcon
-from PyQt5 import QtCore
+import tempfile
+from pathlib import Path
+
+from PySide6.QtCore import QEvent, QLockFile, QTimer, Qt
+from PySide6.QtGui import QAction, QIcon, QKeySequence, QPalette, QPixmapCache
+from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QKeySequenceEdit,
+    QSizePolicy,
+    QSystemTrayIcon,
+    QVBoxLayout,
+    QWidget,
+)
+
 import my_icon
-import base64
-import src.cEmojiUtils as cEmojiUtils
-import src.cEmojiWidgets as cEmojiWidgets
-import src.cEmojiDialogs as cEmojiDialogs
-import configparser
 import version
-from configparser import ConfigParser
+import src.cEmojiDialogs as cEmojiDialogs
+import src.cEmojiWidgets as cEmojiWidgets
+from src import emoji_store
+from src.app_paths import ensure_app_dirs
+from src.config_service import ConfigService
 
-# 排他处理
-# app_lock = threading.Lock()
 
-# if not app_lock.acquire(False):
-#     QMessageBox.information(None, "提示", "进程已经在运行当中，请检查当前任务栏或托盘中是否存在。")
-#     sys.exit()
+HWND_TOPMOST = -1
+HWND_NOTOPMOST = -2
+SWP_NOSIZE = 0x0001
+SWP_NOMOVE = 0x0002
+SWP_SHOWWINDOW = 0x0040
+GA_ROOT = 2
+WM_HOTKEY = 0x0312
+HOTKEY_ID = 1001
+MOD_ALT = 0x0001
+MOD_CONTROL = 0x0002
+MOD_SHIFT = 0x0004
+MOD_WIN = 0x0008
+MOD_NOREPEAT = 0x4000
 
-# 获取当前应用程序的路径
-# current_path = os.path.dirname(os.path.realpath(__file__))
-current_path = os.path.dirname(sys.executable)
 
-# 设置文件夹路径
-emoji_folder = os.path.join(current_path, "emoji/")
-emoji_small_folder = os.path.join(current_path, "emoji_small/")
-# print(emoji_small_folder)
+if sys.platform == "win32":
+    user32 = ctypes.windll.user32
+    user32.GetAncestor.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+    user32.GetAncestor.restype = ctypes.c_void_p
+    user32.SetWindowPos.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+    user32.SetWindowPos.restype = ctypes.c_bool
+    user32.RegisterHotKey.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_uint, ctypes.c_uint]
+    user32.RegisterHotKey.restype = ctypes.c_bool
+    user32.UnregisterHotKey.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    user32.UnregisterHotKey.restype = ctypes.c_bool
 
-# 如果文件夹不存在，则创建文件夹
-if not os.path.exists(emoji_folder):
-    os.makedirs(emoji_folder)
-if not os.path.exists(emoji_small_folder):
-    os.makedirs(emoji_small_folder)
 
-# 改成从ini读取，调用示例
-# etc_emoji_folder = os.path.join(current_path, "etc/")
-# config_etc_emoji_folder = os.path.join(etc_emoji_folder, "cEmoji.ini")
-# 读取ini
-# close_app_flag = cEmojiUtils.read_ini_value(config_etc_emoji_folder, "config", "close_app_flag", "True")
-# 写入ini
-# cEmojiUtils.write_ini_value(config_etc_emoji_folder, "config", "close_app_mode", "True")
+def set_window_topmost(window, enabled):
+    if sys.platform == "win32":
+        hwnd = user32.GetAncestor(int(window.winId()), GA_ROOT) or int(window.winId())
+        insert_after = ctypes.c_void_p(HWND_TOPMOST if enabled else HWND_NOTOPMOST)
+        flags = SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+        if not user32.SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, flags):
+            raise ctypes.WinError()
+        return
 
-# 定义全局变量保存关闭应用程序的标志和关闭应用程序方式
+    window.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, enabled)
+    window.show()
 
-# 读取ini文件
-config = configparser.ConfigParser()
-config.read("./etc/cEmoji.ini", encoding="utf-8")
 
-# True:不提示弹窗 False：提示弹窗（默认True）
-close_app_flag = config.getboolean("config", "close_app_flag")
+class MSG(ctypes.Structure):
+    _fields_ = [
+        ("hwnd", wintypes.HWND),
+        ("message", wintypes.UINT),
+        ("wParam", wintypes.WPARAM),
+        ("lParam", wintypes.LPARAM),
+        ("time", wintypes.DWORD),
+        ("pt", wintypes.POINT),
+    ]
 
-# 0：nothing 1：结束应用程序 2：最小化（默认0）
-close_app_mode = config.getint("config", "close_app_mode")
 
-# 0：非管理模式 1：管理模式（默认0）
-delete_flag = 0
+def hotkey_to_windows(hotkey_text):
+    sequence = QKeySequence(hotkey_text)
+    if sequence.isEmpty():
+        return None
 
-# 主程序
+    combination = sequence[0]
+    key = combination.key()
+    modifiers = combination.keyboardModifiers()
+    win_modifiers = MOD_NOREPEAT
+
+    if modifiers & Qt.KeyboardModifier.ControlModifier:
+        win_modifiers |= MOD_CONTROL
+    if modifiers & Qt.KeyboardModifier.AltModifier:
+        win_modifiers |= MOD_ALT
+    if modifiers & Qt.KeyboardModifier.ShiftModifier:
+        win_modifiers |= MOD_SHIFT
+    if modifiers & Qt.KeyboardModifier.MetaModifier:
+        win_modifiers |= MOD_WIN
+
+    if Qt.Key.Key_A <= key <= Qt.Key.Key_Z:
+        vk = int(key)
+    elif Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
+        vk = int(key)
+    elif Qt.Key.Key_F1 <= key <= Qt.Key.Key_F24:
+        vk = 0x70 + (int(key) - int(Qt.Key.Key_F1))
+    else:
+        return None
+
+    return win_modifiers, vk
+
+
 class ImageViewer(QWidget):
     def __init__(self):
         super().__init__()
+        ensure_app_dirs()
 
-        ################################################################
-        # 主界面初始化
-        ################################################################
-        self.setWindowTitle("cEmoji") # 设置title
-        self.setFixedSize(500, 600)  # 设置窗口大小为400x600像素
+        self.config_service = ConfigService()
+        self.app_config = self.config_service.load()
+        self._tmp_icon_path = None
+        self._exiting = False
+        self._hotkey_registered = False
+        self.search_timer = QTimer(self)
+        self.search_timer.setSingleShot(True)
+        self.search_timer.setInterval(180)
+        self.search_timer.timeout.connect(self.display_emoji)
 
-        # 设置标题栏图标，创建临时ico文件。使用完毕删除
-        with open("tmp.ico", "wb") as tmp:
-            tmp.write(base64.b64decode(my_icon.Icon().img))
+        self.setWindowTitle("cEmoji")
+        self.setFixedSize(500, 600)
 
-        icon = QIcon("tmp.ico")
+        icon = self.create_icon()
         self.setWindowIcon(icon)
 
-        # 创建主布局
         self.main_layout = QVBoxLayout()
+        self.main_layout.setContentsMargins(12, 12, 12, 10)
+        self.main_layout.setSpacing(8)
         self.setLayout(self.main_layout)
 
-        ################################################################
-        # 创建托盘
-        ################################################################
-        # 创建退出操作并连接到退出方法
-        exit_action = QAction("Exit", self)
+        self.setup_tray(icon)
+        self.setup_search()
+        self.setup_buttons()
+        self.setup_emoji_view()
+        self.setup_footer()
+        self.apply_system_theme()
+        if self.register_hotkey(self.app_config.hotkey):
+            self.hotkey_status_label.setText("已启用，可呼出/隐藏主界面")
+        else:
+            self.hotkey_status_label.setText("注册失败")
+
+        self.display_emoji()
+        if self.app_config.delete_flag != 0:
+            self.set_config_value("delete_flag", 0)
+
+    def create_icon(self):
+        icon_bytes = base64.b64decode(my_icon.Icon().img)
+        tmp_icon = tempfile.NamedTemporaryFile(delete=False, suffix=".ico")
+        tmp_icon.write(icon_bytes)
+        tmp_icon.close()
+        self._tmp_icon_path = tmp_icon.name
+        return QIcon(self._tmp_icon_path)
+
+    def setup_tray(self, icon):
+        show_action = QAction("显示界面", self)
+        show_action.triggered.connect(self.show_main_window)
+
+        exit_action = QAction("退出", self)
         exit_action.triggered.connect(self.on_exit)
 
-        # 创建系统托盘菜单并添加退出操作
         self.tray_icon_menu = QMenu(self)
+        self.tray_icon_menu.addAction(show_action)
+        self.tray_icon_menu.addSeparator()
         self.tray_icon_menu.addAction(exit_action)
 
-        # 创建系统托盘图标并设置图标和菜单
         self.tray_icon = QSystemTrayIcon(self)
-        self.tray_icon.setIcon(QIcon("tmp.ico"))  # 替换为你的应用程序图标路径
+        self.tray_icon.setIcon(icon)
         self.tray_icon.setContextMenu(self.tray_icon_menu)
-        self.tray_icon.setToolTip("cEmoji-Exit请右击")  # 添加此行
-
-        # 连接系统托盘图标的激活事件到对应方法
+        self.tray_icon.setToolTip("cEmoji")
         self.tray_icon.activated.connect(self.on_tray_icon_activated)
 
-        # 删除临时图标
-        os.remove("tmp.ico")
-
-        ################################################################
-        # 创建始终置顶，上传，管理按钮
-        ################################################################
-        # 添加按钮布局
+    def setup_buttons(self):
         self.buttons_layout = QHBoxLayout()
         self.main_layout.addLayout(self.buttons_layout)
 
-        # 在按钮布局中添加三个按钮
         self.always_on_top_button = QPushButton("始终置顶")
-        # 设置为可检查按钮  
         self.always_on_top_button.setCheckable(True)
+        self.upload_button = QPushButton("上传")
         self.manage_button = QPushButton("管理")
-        # 设置为可检查按钮  
         self.manage_button.setCheckable(True)
 
-        self.upload_button = QPushButton("上传")
+        for button in (self.always_on_top_button, self.upload_button, self.manage_button):
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            self.buttons_layout.addWidget(button)
 
-        self.buttons_layout.addWidget(self.always_on_top_button)
-        self.buttons_layout.addWidget(self.upload_button) 
-        self.buttons_layout.addWidget(self.manage_button)
-
-        # 设置按钮策略
-        self.always_on_top_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.upload_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.manage_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
-        # 连接信号和槽 
         self.always_on_top_button.clicked.connect(self.toggle_always_on_top)
-        self.upload_button.clicked.connect(self.show_upload_dialog) 
+        self.upload_button.clicked.connect(self.show_upload_dialog)
         self.manage_button.clicked.connect(self.show_manage_dialog)
 
-        ################################################################
-        # 创建搜索框
-        ################################################################
-        # 创建搜索框
+    def setup_search(self):
         self.search_bar = QLineEdit(self)
-        self.search_bar.textChanged.connect(self.display_emoji)
-
-        # 设置搜索框样式为透明
+        self.search_bar.textChanged.connect(self.schedule_display_emoji)
         self.search_bar.setStyleSheet("background-color: transparent;")
-
-        # 设置搜索框的占位文本
-        searchMessage = "输入表情标题搜索(当前表情数量: " + str(cEmojiUtils.getCountFromEmoji_small(emoji_small_folder)) + ")"
-        self.search_bar.setPlaceholderText(searchMessage)
-
-        # 添加上传按钮和搜索框到主布局
-        self.main_layout.addWidget(self.upload_button)
+        self.update_search_placeholder()
         self.main_layout.addWidget(self.search_bar)
 
-        ################################################################
-        # 创建搜索框
-        ################################################################
-        # 创建滚动区域
-        self.scroll_area = QScrollArea(self)
-        self.scroll_area.setWidgetResizable(True)
+    def setup_emoji_view(self):
+        self.emoji_view = cEmojiWidgets.EmojiListWidget(self)
+        self.emoji_view.emoji_deleted.connect(self.display_emoji)
+        self.main_layout.addWidget(self.emoji_view)
 
-        # 创建滚动区域内容
-        self.scroll_area_content = QWidget(self.scroll_area)
-        self.scroll_area.setWidget(self.scroll_area_content)
+    def setup_footer(self):
+        self.shortcut_frame = QFrame(self)
+        self.shortcut_layout = QHBoxLayout(self.shortcut_frame)
+        self.shortcut_layout.setContentsMargins(0, 0, 0, 0)
+        self.shortcut_label = QLabel("快捷呼出/隐藏", self)
+        self.hotkey_edit = QKeySequenceEdit(QKeySequence(self.app_config.hotkey), self)
+        self.hotkey_edit.setMaximumWidth(150)
+        self.hotkey_edit.setToolTip("在这里输入快捷键，用于呼出或隐藏主界面")
+        self.hotkey_edit.editingFinished.connect(self.save_hotkey)
+        self.hotkey_status_label = QLabel("在这里输入快捷键来控制", self)
+        self.shortcut_layout.addWidget(self.shortcut_label)
+        self.shortcut_layout.addWidget(self.hotkey_edit)
+        self.shortcut_layout.addWidget(self.hotkey_status_label, stretch=1)
+        self.main_layout.addWidget(self.shortcut_frame)
 
-        # 创建滚动区域布局
-        self.scroll_area_layout = QGridLayout()  # 修改为QGridLayout
-        self.scroll_area_content.setLayout(self.scroll_area_layout)
+        self.footer_layout = QHBoxLayout()
+        self.main_layout.addLayout(self.footer_layout)
 
-        # 添加滚动区域到主布局
-        self.main_layout.addWidget(self.scroll_area)
-
-        # 版本号显示
+        self.copy_tip_label = QLabel("鼠标左键单击图片可复制到剪切板", self)
         self.version_label = QLabel("版本号：" + version.cEmojiversion, self)
-        self.main_layout.addWidget(self.version_label, alignment=QtCore.Qt.AlignBottom | QtCore.Qt.AlignRight)
+        self.footer_layout.addWidget(self.copy_tip_label, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.footer_layout.addStretch(1)
+        self.footer_layout.addWidget(self.version_label, alignment=Qt.AlignmentFlag.AlignRight)
 
-        # 显示emoji图片
-        self.display_emoji()
-
-        self.write_ini("delete_flag", "0")
-
-    ################################################################
-    # 托盘相关处理
-    ################################################################
     def closeEvent(self, event):
-        global close_app_flag, close_app_mode
+        self._exiting = True
+        self.cleanup()
+        event.accept()
 
-        # 如果之前选择了关闭方式并勾选了记住选项，则直接使用先前选择的方式
-        if close_app_flag:
-            if close_app_mode == 1:
-                self.on_exit()
-            elif close_app_mode == 2:
-                event.ignore()
-                self.hide()
-                self.tray_icon.show()
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange and self.isMinimized() and not self._exiting:
+            QTimer.singleShot(0, self.hide_to_tray)
+
+    def hide_to_tray(self):
+        if self._exiting:
             return
+        self.hide()
+        self.tray_icon.show()
 
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("要关闭cEmoji吗QAQ")
-        close_button = msg_box.addButton("狠心关闭", QMessageBox.YesRole)
-        minimize_button = msg_box.addButton("缩小至托盘", QMessageBox.NoRole)
-        remember_choice = QCheckBox("记住我的选择")
-        msg_box.setCheckBox(remember_choice)
-
-        # 用于记录选择的按钮
-        clicked_role = [None]
-
-        def button_clicked(button):
-            if button == close_button:
-                clicked_role[0] = "close"
-            elif button == minimize_button:
-                clicked_role[0] = "minimize"
-
-        msg_box.buttonClicked.connect(button_clicked)
-
-        msg_box.exec_()
-
-        if clicked_role[0] == "close":
-            close_app_mode = 1
-            if remember_choice.isChecked():
-                close_app_flag = True
-
-                # # 修改配置
-                # config.set("config", "close_app_flag", str(close_app_flag))
-                # config.set("config", "close_app_mode", str(close_app_mode))
-
-                # # 将更改写回文件
-                # with open("./etc/cEmoji.ini", "w") as configfile:
-                #     config.write(configfile)
-
-                # 将配置写入ini文件
-                self.write_ini("close_app_flag", str(close_app_flag))
-                self.write_ini("close_app_mode", str(close_app_mode))
-
-            self.on_exit()
-        elif clicked_role[0] == "minimize":
-            close_app_mode = 2
-            if remember_choice.isChecked():
-                close_app_flag = True
-
-                # # 修改配置
-                # config.set("config", "close_app_flag", str(close_app_flag))
-                # config.set("config", "close_app_mode", str(close_app_mode))
-
-                # # 将更改写回文件
-                # with open("./etc/cEmoji.ini", "w") as configfile:
-                #     config.write(configfile)
-
-                # 将配置写入ini文件
-                self.write_ini("close_app_flag", str(close_app_flag))
-                self.write_ini("close_app_mode", str(close_app_mode))
-
-            event.ignore()
-            self.hide()
-            self.tray_icon.show()
-        else:
-            event.ignore()
-
-    # 托盘可以右键关闭
     def on_exit(self):
-        self.tray_icon.hide()
+        self._exiting = True
+        self.cleanup()
         QApplication.quit()
 
-    # 托盘图标
+    def cleanup(self):
+        self.unregister_hotkey()
+        if hasattr(self, "tray_icon"):
+            self.tray_icon.hide()
+        if self._tmp_icon_path and os.path.exists(self._tmp_icon_path):
+            os.remove(self._tmp_icon_path)
+            self._tmp_icon_path = None
+
     def on_tray_icon_activated(self, reason):
-        if reason == QSystemTrayIcon.DoubleClick:
-            self.showNormal()
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self.show_main_window()
 
-    ################################################################
-    # 始终置顶按钮事件
-    ################################################################
-    def toggle_always_on_top(self):
-        # 获取当前窗口的“始终置顶”状态
-        is_always_on_top = self.windowFlags() & QtCore.Qt.WindowStaysOnTopHint
-
-        # 切换状态
-        if is_always_on_top:
-            self.setWindowFlags(self.windowFlags() & ~
-                                QtCore.Qt.WindowStaysOnTopHint)
-            self.always_on_top_button.setChecked(False)
-        else:
-            self.setWindowFlags(self.windowFlags() |
-                                QtCore.Qt.WindowStaysOnTopHint)
-            self.always_on_top_button.setChecked(True)
-
-        # 更新窗口标志以应用更改
+    def show_main_window(self):
+        self.showNormal()
         self.show()
+        self.raise_()
+        self.activateWindow()
 
-    ################################################################
-    # 上传按钮事件
-    ################################################################
+    def toggle_main_window(self):
+        if self.isVisible() and not self.isMinimized():
+            self.hide_to_tray()
+            return
+
+        self.show_main_window()
+
+    def toggle_always_on_top(self):
+        enabled = self.always_on_top_button.isChecked()
+        try:
+            set_window_topmost(self, enabled)
+        except OSError as error:
+            self.always_on_top_button.setChecked(not enabled)
+            QMessageBox.warning(self, "置顶失败", str(error))
+
     def show_upload_dialog(self):
-        msg_box = QMessageBox(self)
-        msg_box.setText("请选择上传类型:")
-        msg_box.setWindowTitle("cEmoji")
-        button_image = msg_box.addButton("图片", QMessageBox.YesRole)
-        button_zip = msg_box.addButton("压缩包", QMessageBox.NoRole)
-        clipboard_button = msg_box.addButton("读取剪切板内容", QMessageBox.ActionRole)
-        cancel_button = msg_box.addButton("取消上传", QMessageBox.RejectRole)
+        cEmojiDialogs.show_upload_dialog(self)
 
-        ret = msg_box.exec_()
-
-        if msg_box.clickedButton() == button_image:
-            cEmojiDialogs.upload_image(self)
-        elif msg_box.clickedButton() == button_zip:
-            cEmojiDialogs.upload_zip(self)
-        elif msg_box.clickedButton() == clipboard_button:
-            cEmojiDialogs.clipboard_button(self)
-        else:
-            pass
-
-    ################################################################
-    # 管理按钮事件
-    ################################################################
     def show_manage_dialog(self):
-        global delete_flag
-        # 判断是否在管理模式
-        if delete_flag == 0:
-            delete_flag = 1
+        if self.app_config.delete_flag == 0:
+            self.set_config_value("delete_flag", 1)
+            self.emoji_view.set_manage_mode(True)
+            self.manage_button.setText("退出管理")
+        else:
+            self.set_config_value("delete_flag", 0)
+            self.emoji_view.set_manage_mode(False)
+            self.manage_button.setText("管理")
 
-            # # 修改配置
-            # config.set("config", "delete_flag", str(delete_flag))
+    def set_config_value(self, key, value):
+        self.config_service.set_value(key, value)
+        self.app_config = self.config_service.load()
 
-            # # 将更改写回文件
-            # with open("./etc/cEmoji.ini", "w") as configfile:
-            #     config.write(configfile)
+    def save_hotkey(self):
+        hotkey_text = self.hotkey_edit.keySequence().toString(QKeySequence.SequenceFormat.NativeText)
+        if not hotkey_text:
+            self.hotkey_status_label.setText("快捷键不能为空")
+            self.hotkey_edit.setKeySequence(QKeySequence(self.app_config.hotkey))
+            return
 
-            # 将配置写入ini文件
-            self.write_ini("delete_flag", str(delete_flag))
+        if not self.register_hotkey(hotkey_text):
+            self.hotkey_status_label.setText("注册失败")
+            self.hotkey_edit.setKeySequence(QKeySequence(self.app_config.hotkey))
+            return
 
-            # 刷新瀑布图区域
-            self.display_emoji()
+        self.set_config_value("hotkey", hotkey_text)
+        self.hotkey_status_label.setText("已保存，可呼出/隐藏主界面")
 
-             # 批量添加删除图标
-            cEmojiWidgets.ClickableLabel.add_delete_icons_to_all()
-        elif delete_flag == 1:
-            delete_flag = 0
+    def register_hotkey(self, hotkey_text):
+        if sys.platform != "win32":
+            return True
 
-            # # 修攍置
-            # config.set("config", "delete_flag", str(delete_flag))
+        converted = hotkey_to_windows(hotkey_text)
+        if converted is None:
+            return False
 
-            # # 将替换写因文件
-            # with open("./etc/cEmoji.ini", "w") as configfile:
-            #     config.write(configfile)
+        self.unregister_hotkey()
+        modifiers, vk = converted
+        hwnd = int(self.winId())
+        if not user32.RegisterHotKey(hwnd, HOTKEY_ID, modifiers, vk):
+            return False
 
-            # 将配置写入ini文件
-            self.write_ini("delete_flag", str(delete_flag))
+        self._hotkey_registered = True
+        return True
 
-            # 刷新瀑布图区域
-            self.display_emoji()
+    def unregister_hotkey(self):
+        if sys.platform == "win32" and self._hotkey_registered:
+            user32.UnregisterHotKey(int(self.winId()), HOTKEY_ID)
+            self._hotkey_registered = False
 
-        # # 查找父窗口（self）中所有的 ClickableLabel 对象
-        # clickable_labels = self.findChildren(cEmojiWidgets.ClickableLabel(self))
+    def nativeEvent(self, event_type, message):
+        if sys.platform == "win32":
+            msg = MSG.from_address(int(message))
+            if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
+                self.toggle_main_window()
+                return True, 0
 
-        # print("我是clickable_labels" + clickable_labels)
+        return super().nativeEvent(event_type, message)
 
-        # # 在每一个 ClickableLabel 对象上调用 reset_style 和 add_delete_icon 方法
-        # for label in clickable_labels:
-        #     label.reset_style()
-        #     label.add_delete_icon()
+    def apply_system_theme(self):
+        resolved_mode = "dark" if self.is_system_dark() else "light"
+        if resolved_mode == "dark":
+            self.apply_dark_theme()
+        else:
+            self.apply_light_theme()
+        self.emoji_view.apply_theme(resolved_mode)
 
-        # global close_app_flag, close_app_mode
+    def is_system_dark(self):
+        palette = QApplication.palette()
+        return palette.color(QPalette.ColorRole.Window).lightness() < 128
 
-        # msg = QMessageBox(self)
-        # msg.setWindowTitle("管理")
-        # reset_button = QPushButton("重置关闭方式")
-        # layout = QVBoxLayout()
-        # layout.addWidget(reset_button)
-        # widget = QWidget()
-        # widget.setLayout(layout)
-        # msg.layout().addWidget(widget)
+    def apply_light_theme(self):
+        self.setStyleSheet("""
+            QWidget { background: #f7f8fa; color: #1f2328; }
+            QPushButton, QKeySequenceEdit { background: #ffffff; border: 1px solid #c7ccd1; border-radius: 4px; padding: 4px 8px; }
+            QPushButton:checked { background: #ddefff; border-color: #5aa4e8; }
+            QLineEdit { background: #ffffff; border: 1px solid #c7ccd1; border-radius: 4px; padding: 5px 8px; color: #1f2328; }
+            QFrame { background: transparent; }
+        """)
 
-        # # 重置关闭方式的按钮事件
-        # def reset_close_mode():
-        #     global close_app_flag, close_app_mode
-        #     close_app_flag = False
-        #     close_app_mode = 0
-        #     QMessageBox.information(self, "重置成功", "重置关闭方式成功")
+    def apply_dark_theme(self):
+        self.setStyleSheet("""
+            QWidget { background: #16181c; color: #eef1f4; }
+            QPushButton, QKeySequenceEdit { background: #24272d; border: 1px solid #3a3f47; border-radius: 4px; padding: 4px 8px; color: #eef1f4; }
+            QPushButton:checked { background: #24476b; border-color: #66a8e8; }
+            QLineEdit { background: #202329; border: 1px solid #3a3f47; border-radius: 4px; padding: 5px 8px; color: #eef1f4; }
+            QFrame { background: transparent; }
+        """)
 
-        # reset_button.clicked.connect(reset_close_mode)
-        # msg.exec_()
-
-    ################################################################
-    # 将配置写入ini文件
-    # 参数1：self（默认）
-    # 参数2：key
-    # 参数3：value
-    ################################################################
-    def write_ini(self, key, value):
-        # 使用ConfigParser进行常规操作
-        config = ConfigParser()
-        config.read("./etc/cEmoji.ini", encoding="utf-8")
-
-        # 修改某个设置
-        config.set("config", key, value)
-
-        # 将配置写回文件时保留注释
-        with open("./etc/cEmoji.ini", "r", encoding="utf-8") as f:
-            lines = f.readlines()
-
-        with open("./etc/cEmoji.ini", "w", encoding="utf-8") as f:
-            for line in lines:
-                stripped = line.strip()
-                if "=" in stripped:  # 这是一个配置项
-                    key = stripped.split("=")[0].strip()
-                    section = None
-                    for s in config.sections():
-                        if key in config[s]:
-                            section = s
-                            break
-                    # 如果键已更改，则写入新值，否则写入原始行
-                    if section and config.get(section, key) != stripped.split("=")[1].strip():
-                        f.write(f"{key} = {config.get(section, key)}\n")
-                    else:
-                        f.write(line)
-                else:
-                    f.write(line)
-
-    ################################################################
-    # 刷新瀑布图区域
-    ################################################################
     def display_emoji(self):
-        # 清除当前显示的所有图片
-        for i in reversed(range(self.scroll_area_layout.count())):
-            self.scroll_area_layout.itemAt(i).widget().setParent(None)
+        self.emoji_view.set_emojis(emoji_store.list_emojis(self.search_bar.text()))
+        self.update_search_placeholder()
 
-        # 获取所有的emoji图片
-        emoji_images = [f for f in os.listdir(emoji_small_folder) if os.path.isfile(
-            os.path.join(emoji_small_folder, f)) and self.search_bar.text().lower() in f.lower()]
+    def schedule_display_emoji(self):
+        self.search_timer.start()
 
-        # 按文件创建时间排序
-        sorted_emoji_images = sorted(emoji_images, key=lambda f: os.path.getctime(os.path.join(emoji_small_folder, f)), reverse=True)
+    def update_search_placeholder(self):
+        search_message = "输入表情标题搜索(当前表情数量: " + str(emoji_store.count_emojis()) + ")"
+        self.search_bar.setPlaceholderText(search_message)
 
-        # 将图片添加到滚动区域布局
-        for i, img_file in enumerate(sorted_emoji_images):
-            label = cEmojiWidgets.ClickableLabel(self)
-            label.setObjectName(img_file)
-            label.setPixmap(os.path.join(emoji_small_folder, img_file))
-            label.setStyleSheet("position:relative;")
 
-            # 连接信号来刷新图片界面
-            label.image_deleted.connect(self.display_emoji)
-            
-            row = i // 3
-            column = i % 3
-            self.scroll_area_layout.addWidget(label, row, column)
-
-        # 更新搜索框的占位文本
-        searchMessage = "输入表情标题搜索(当前表情数量: " + str(cEmojiUtils.getCountFromEmoji_small(emoji_small_folder)) + ")"
-        self.search_bar.setPlaceholderText(searchMessage)
-
-################################################################
-# 主处理
-################################################################
 if __name__ == "__main__":
-    # 主界面初始化
     app = QApplication(sys.argv)
+    QPixmapCache.setCacheLimit(65536)
+    lock = QLockFile(str(Path(tempfile.gettempdir()) / "cEmoji.lock"))
+    if not lock.tryLock(100):
+        QMessageBox.information(None, "提示", "cEmoji 已经在运行中")
+        sys.exit(0)
 
-    image_viewer = ImageViewer()
-    image_viewer.show()
-
-    # app_lock.release()
-    sys.exit(app.exec_())
+    try:
+        image_viewer = ImageViewer()
+        image_viewer.show()
+        sys.exit(app.exec())
+    finally:
+        lock.unlock()

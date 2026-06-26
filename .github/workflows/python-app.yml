@@ -5,46 +5,48 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
   build_exe:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
     - name: Install dependencies
       run: |
-        pip install pyinstaller
-        pip install shutil
-        pip install patool
-        pip install pywin32
-        pip install -r requirements.txt
+        python -m pip install --upgrade pip
+        python -m pip install nuitka ordered-set zstandard
+        python -m pip install -r requirements.txt
 
-    - name: Execute pyinstaller
-      run: pyinstaller.exe --noconsole --onefile --strip --icon=my_icon.ico .\cEmoji.py
+    - name: Build with Nuitka
+      run: |
+        python -m nuitka --standalone --windows-console-mode=disable --windows-icon-from-ico=my_icon.ico --enable-plugin=pyside6 --output-dir=build .\cEmoji.py
+        if (!(Test-Path .\build\cEmoji.dist\cEmoji.exe)) { throw "cEmoji.exe was not generated" }
 
     - name: Show and zip cEmoji
       run: |
-        dir dist
-        mkdir cEmoji
-        xcopy .\resource\* cEmoji\ /E /I
-        copy .\dist\cEmoji.exe cEmoji\
-        mkdir cEmoji\etc
-        copy .\etc\* cEmoji\etc\
-        mkdir cEmoji\bin
-        copy .\bin\* cEmoji\bin\
+        Get-ChildItem .\build\cEmoji.dist
+        Rename-Item .\build\cEmoji.dist cEmoji
+        Copy-Item .\resource\* cEmoji\ -Recurse -Force
+        New-Item -ItemType Directory -Force cEmoji\etc | Out-Null
+        Copy-Item .\etc\* cEmoji\etc\ -Force
+        New-Item -ItemType Directory -Force cEmoji\bin | Out-Null
+        Copy-Item .\bin\* cEmoji\bin\ -Force
         .\lib\7za.exe a cEmoji.zip cEmoji
         .\lib\7za.exe a cEmoji_LZMA.7z cEmoji -m0=lzma2 -mx=9 
         .\lib\7za.exe l cEmoji.zip
         .\lib\7za.exe l cEmoji_LZMA.7z
 
     - name: Create Release and Upload Release Asset
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: V0.${{ github.run_id }}
         name: Release V0.${{ github.run_id }}
