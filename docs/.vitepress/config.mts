@@ -4,10 +4,11 @@ import { defineConfig } from 'vitepress';
 export default defineConfig({
   lang: 'zh-CN',
   title: 'cEmoji',
+  base: '/cEmoji/',
   description: '表情包外挂 - Python 表情包扩展工具',
   cleanUrls: true,
   head: [
-    ['link', { rel: 'icon', href: '/favicon.ico' }],
+    ['link', { rel: 'icon', href: '/cEmoji/favicon.ico' }],
     ['meta', { name: 'theme-color', content: '#3c3c3d' }]
   ],
   sitemap: {
