@@ -4,7 +4,10 @@ layout: home
 hero:
   name: 'cEmoji'
   text: '表情包外挂'
-  tagline: Python 表情包扩展工具 - 导入、管理、使用表情包的完整解决方案
+  tagline: Teams表情包扩展工具 - 导入、管理、使用表情包的完整解决方案
+  image:
+    src: /logo.webp
+    alt: cEmoji
   actions:
     - theme: brand
       text: '快速开始'
