@@ -1,13 +1,12 @@
 import subprocess
 
-from PySide6.QtCore import QAbstractListModel, QEvent, QModelIndex, QPersistentModelIndex, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QAbstractListModel, QEvent, QMimeData, QModelIndex, QPersistentModelIndex, QRect, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QColor, QMovie, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QApplication, QInputDialog, QListView, QMenu, QMessageBox, QStyle, QStyledItemDelegate, QToolTip
+from PySide6.QtWidgets import QApplication, QInputDialog, QListView, QMenu, QStyle, QStyledItemDelegate, QToolTip
 
 from src import emoji_store
 from src import message_box
 from src import theme
-from src.app_paths import BIN_DIR
 
 
 ImagePathRole = Qt.ItemDataRole.UserRole + 1
@@ -404,14 +403,18 @@ class EmojiListWidget(QListView):
             message_box.warning(self, "打开失败", str(error))
 
     def copy_gif(self, image_path):
-        command = BIN_DIR / "cpgif.exe"
+        if not image_path.exists():
+            message_box.warning(self, "复制失败", "文件不存在")
+            return False
+
+        image_path = image_path.resolve()
+        mime_data = QMimeData()
+        mime_data.setUrls([QUrl.fromLocalFile(str(image_path))])
         try:
-            subprocess.Popen(
-                [str(command), str(image_path)],
-                creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
-            )
+            mime_data.setData("image/gif", image_path.read_bytes())
         except OSError as error:
             message_box.warning(self, "复制失败", str(error))
             return False
+        QApplication.clipboard().setMimeData(mime_data)
         return True
 
