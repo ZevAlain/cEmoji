@@ -2,9 +2,11 @@ import subprocess
 
 from PySide6.QtCore import QAbstractListModel, QEvent, QModelIndex, QPersistentModelIndex, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QMovie, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QApplication, QListView, QMenu, QMessageBox, QStyle, QStyledItemDelegate, QToolTip
+from PySide6.QtWidgets import QApplication, QInputDialog, QListView, QMenu, QMessageBox, QStyle, QStyledItemDelegate, QToolTip
 
 from src import emoji_store
+from src import message_box
+from src import theme
 from src.app_paths import BIN_DIR
 
 
@@ -28,9 +30,9 @@ class EmojiListModel(QAbstractListModel):
 
         image_path = self.image_paths[index.row()]
         if role == Qt.ItemDataRole.DisplayRole:
-            return emoji_store.display_name_for_thumbnail(image_path)
+            return emoji_store.display_title_for_thumbnail(image_path)
         if role == Qt.ItemDataRole.ToolTipRole:
-            return emoji_store.display_name_for_thumbnail(image_path)
+            return emoji_store.display_title_for_thumbnail(image_path)
         if role == Qt.ItemDataRole.UserRole:
             return emoji_store.display_name_for_thumbnail(image_path)
         if role == ImagePathRole:
@@ -90,15 +92,15 @@ class EmojiItemDelegate(QStyledItemDelegate):
 
     def paint_background(self, painter, option):
         view = self.parent()
-        dark_mode = getattr(view, "theme_mode", "light") == "dark"
+        color = theme.colors(getattr(view, "theme_mode", "light"))
         if option.state & QStyle.StateFlag.State_Selected:
-            painter.setBrush(QColor(36, 71, 107) if dark_mode else QColor(216, 235, 255))
-            painter.setPen(QPen(QColor(102, 168, 232) if dark_mode else QColor(77, 157, 232), 1))
-            painter.drawRoundedRect(option.rect.adjusted(2, 2, -2, -2), 4, 4)
+            painter.setBrush(QColor(color["item_selected"]))
+            painter.setPen(QPen(QColor(color["accent"]), 1))
+            painter.drawRoundedRect(option.rect.adjusted(2, 2, -2, -2), 7, 7)
         elif option.state & QStyle.StateFlag.State_MouseOver:
-            painter.setBrush(QColor(36, 40, 48) if dark_mode else QColor(226, 238, 250))
+            painter.setBrush(QColor(color["item_hover"]))
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRoundedRect(option.rect.adjusted(2, 2, -2, -2), 4, 4)
+            painter.drawRoundedRect(option.rect.adjusted(2, 2, -2, -2), 7, 7)
 
     def paint_image(self, painter, option, index):
         model = index.model()
@@ -122,8 +124,8 @@ class EmojiItemDelegate(QStyledItemDelegate):
         text_rect = QRect(option.rect.left() + 6, option.rect.top() + 108, option.rect.width() - 12, 20)
         metrics = painter.fontMetrics()
         view = self.parent()
-        dark_mode = getattr(view, "theme_mode", "light") == "dark"
-        painter.setPen(QColor(238, 241, 244) if dark_mode else QColor(31, 35, 40))
+        color = theme.colors(getattr(view, "theme_mode", "light"))
+        painter.setPen(QColor(color["text"]))
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, metrics.elidedText(text, Qt.TextElideMode.ElideMiddle, text_rect.width()))
 
     def paint_gif_badge(self, painter, option, index):
@@ -131,7 +133,7 @@ class EmojiItemDelegate(QStyledItemDelegate):
         if not image_path.lower().endswith(".gif"):
             return
         rect = QRect(option.rect.right() - 42, option.rect.top() + 10, 34, 18)
-        painter.setBrush(QColor(20, 92, 156, 230))
+        painter.setBrush(QColor(22, 143, 122, 230))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(rect, 5, 5)
         painter.setPen(QColor(255, 255, 255))
@@ -156,11 +158,13 @@ def delete_button_rect(item_rect):
 
 class EmojiListWidget(QListView):
     emoji_deleted = Signal()
+    emoji_copied = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.manage_mode = False
         self.theme_mode = "light"
+        self.empty_message = ""
         self.hover_timer = QTimer(self)
         self.hover_timer.setSingleShot(True)
         self.hover_timer.setInterval(1000)
@@ -198,29 +202,7 @@ class EmojiListWidget(QListView):
 
     def apply_theme(self, mode):
         self.theme_mode = mode
-        if mode == "dark":
-            self.setStyleSheet("""
-                QListView { background: #101216; border: 1px solid #30343b; border-radius: 4px; outline: 0; }
-                QListView::item { color: #eef1f4; padding: 5px; border-radius: 4px; }
-                QListView::item:hover { background: #242830; }
-                QListView::item:selected { background: #2e5f91; color: #ffffff; border: 1px solid #74b8ff; }
-                QListView::item:selected:hover { background: #2e5f91; color: #ffffff; border: 1px solid #74b8ff; }
-            """)
-        elif mode == "light":
-            self.setStyleSheet("""
-                QListView { background: #ffffff; border: 1px solid #d0d5db; border-radius: 4px; outline: 0; }
-                QListView::item { color: #1f2328; padding: 5px; border-radius: 4px; }
-                QListView::item:hover { background: #eef5ff; }
-                QListView::item:selected { background: #d8ebff; color: #0b3768; border: 1px solid #4d9de8; }
-                QListView::item:selected:hover { background: #d8ebff; color: #0b3768; border: 1px solid #4d9de8; }
-            """)
-        else:
-            self.setStyleSheet("""
-                QListView { border: 1px solid palette(mid); border-radius: 4px; outline: 0; }
-                QListView::item { padding: 5px; border-radius: 4px; }
-                QListView::item:selected { background: palette(highlight); color: palette(highlighted-text); }
-                QListView::item:selected:hover { background: palette(highlight); color: palette(highlighted-text); }
-            """)
+        self.setStyleSheet(theme.emoji_view_stylesheet(mode))
         self.viewport().update()
 
     def set_emojis(self, image_paths):
@@ -230,6 +212,11 @@ class EmojiListWidget(QListView):
             self.emoji_model.set_paths(image_paths)
         finally:
             self.setUpdatesEnabled(True)
+            self.viewport().update()
+
+    def set_empty_message(self, message):
+        self.empty_message = message
+        self.viewport().update()
 
     def handle_index_clicked(self, index):
         filename = self.emoji_model.filename_at(index)
@@ -241,9 +228,14 @@ class EmojiListWidget(QListView):
 
         image_path = emoji_store.original_image_path(filename)
         if image_path.suffix.lower() == ".gif":
-            self.copy_gif(image_path)
+            copied = self.copy_gif(image_path)
         else:
-            QApplication.clipboard().setPixmap(QPixmap(str(image_path)))
+            pixmap = QPixmap(str(image_path))
+            copied = not pixmap.isNull()
+            if copied:
+                QApplication.clipboard().setPixmap(pixmap)
+        if copied:
+            self.emoji_copied.emit(filename)
 
     def show_item_menu(self, position):
         index = self.indexAt(position)
@@ -254,15 +246,33 @@ class EmojiListWidget(QListView):
         menu = QMenu(self)
         pinned = emoji_store.is_pinned(filename)
         pin_action = QAction("取消置顶" if pinned else "置顶", self)
+        rename_action = QAction("重命名", self)
+        show_file_action = QAction("打开文件位置", self)
         delete_action = QAction("删除", self)
         menu.addAction(pin_action)
+        menu.addAction(rename_action)
+        menu.addAction(show_file_action)
         menu.addSeparator()
         menu.addAction(delete_action)
         action = menu.exec(self.mapToGlobal(position))
         if action == pin_action:
             self.toggle_pinned(filename, not pinned)
+        elif action == rename_action:
+            self.rename_item(filename)
+        elif action == show_file_action:
+            self.open_file_location(filename)
         elif action == delete_action:
             self.delete_item(filename, confirm=True)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.model() is None or self.model().rowCount() != 0 or not self.empty_message:
+            return
+
+        painter = QPainter(self.viewport())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QColor(theme.colors(self.theme_mode)["empty"]))
+        painter.drawText(self.viewport().rect(), Qt.AlignmentFlag.AlignCenter, self.empty_message)
 
     def mouseMoveEvent(self, event):
         super().mouseMoveEvent(event)
@@ -364,12 +374,34 @@ class EmojiListWidget(QListView):
 
     def delete_item(self, filename, confirm):
         if confirm:
-            ret = QMessageBox.question(self, "确认删除", "你确定要删除这个表情吗？")
-            if ret != QMessageBox.StandardButton.Yes:
+            if not message_box.question(self, "确认删除", "你确定要删除这个表情吗？"):
                 return
 
         if emoji_store.delete_emoji(filename):
             self.emoji_deleted.emit()
+
+    def rename_item(self, filename):
+        new_filename, accepted = QInputDialog.getText(self, "重命名", "新的文件名：", text=emoji_store.display_title_for_filename(filename))
+        if not accepted:
+            return
+
+        renamed, message = emoji_store.rename_emoji(filename, new_filename)
+        if not renamed:
+            message_box.warning(self, "重命名失败", message)
+            return
+
+        self.emoji_deleted.emit()
+
+    def open_file_location(self, filename):
+        image_path = emoji_store.original_image_path(filename)
+        if not image_path.exists():
+            message_box.warning(self, "打开失败", "文件不存在")
+            return
+
+        try:
+            subprocess.Popen(["explorer", f"/select,{image_path}"], creationflags=subprocess.CREATE_NO_WINDOW)
+        except OSError as error:
+            message_box.warning(self, "打开失败", str(error))
 
     def copy_gif(self, image_path):
         command = BIN_DIR / "cpgif.exe"
@@ -379,5 +411,7 @@ class EmojiListWidget(QListView):
                 creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
             )
         except OSError as error:
-            QMessageBox.warning(self, "复制失败", str(error))
+            message_box.warning(self, "复制失败", str(error))
+            return False
+        return True
 

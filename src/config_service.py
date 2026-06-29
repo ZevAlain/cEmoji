@@ -13,6 +13,7 @@ class AppConfig:
     close_app_mode: int = 0
     delete_flag: int = 0
     hotkey: str = "Ctrl+Alt+E"
+    hide_after_copy: bool = False
 
 
 class ConfigService:
@@ -26,6 +27,7 @@ class ConfigService:
             close_app_mode=parser.getint(CONFIG_SECTION, "close_app_mode", fallback=0),
             delete_flag=parser.getint(CONFIG_SECTION, "delete_flag", fallback=0),
             hotkey=parser.get(CONFIG_SECTION, "hotkey", fallback="Ctrl+Alt+E"),
+            hide_after_copy=parser.getboolean(CONFIG_SECTION, "hide_after_copy", fallback=False),
         )
 
     def set_value(self, key, value):

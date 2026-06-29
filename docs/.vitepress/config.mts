@@ -47,6 +47,7 @@ export default defineConfig({
         {
           text: '其他',
           items: [
+            { text: '更新日志', link: '/guide/更新日志' },
             { text: '常见问题', link: '/guide/常见问题' },
             { text: '许可证', link: '/guide/许可证' },
           ]

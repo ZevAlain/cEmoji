@@ -2,6 +2,7 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, Signal, Slot
 from PySide6.QtWidgets import QFileDialog, QLabel, QMessageBox, QProgressDialog
 
 from src import emoji_store
+from src import message_box
 
 
 class ImportSignals(QObject):
@@ -94,7 +95,7 @@ def start_import(self, import_func, filenames):
         progress_dialog.setValue(progress_dialog.maximum())
         progress_dialog.close()
         self.display_emoji()
-        QMessageBox.information(
+        message_box.information(
             self,
             "导入完成",
             f"成功导入：{summary.imported} 个\n已存在跳过：{summary.skipped} 个\n失败：{summary.failed} 个",
@@ -105,7 +106,7 @@ def start_import(self, import_func, filenames):
             self._active_imports.remove(worker)
         self.upload_button.setEnabled(True)
         progress_dialog.close()
-        QMessageBox.warning(self, "导入失败", message)
+        message_box.warning(self, "导入失败", message)
 
     worker.signals.progress.connect(update_progress)
     worker.signals.finished.connect(finish_import)
@@ -125,14 +126,14 @@ def import_clipboard_image(self):
 
     image = clipboard_service.read_clipboard_image()
     if image is None:
-        QMessageBox.information(self, "提示", "剪切板中没有可读取的图片")
+        message_box.information(self, "提示", "剪切板中没有可读取的图片")
         return
 
     filename = clipboard_service.new_clipboard_filename()
     try:
         emoji_store.import_clipboard_image(image, filename)
     except Exception as error:
-        QMessageBox.warning(self, "导入失败", str(error))
+        message_box.warning(self, "导入失败", str(error))
         return
 
     self.display_emoji()

@@ -35,7 +35,7 @@ def list_emojis(search_text=""):
     query = search_text.lower()
     if not query:
         return list(get_emoji_index())
-    return [path for path in get_emoji_index() if query in path.name.lower()]
+    return [path for path in get_emoji_index() if query in display_title_for_thumbnail(path).lower()]
 
 
 def refresh_index():
@@ -152,6 +152,56 @@ def delete_emoji(filename):
     return removed
 
 
+def rename_emoji(filename, new_filename):
+    new_filename = Path(new_filename).name.strip()
+    if not new_filename:
+        return False, "文件名不能为空"
+
+    old_original = EMOJI_DIR / filename
+    old_thumbnail = EMOJI_SMALL_DIR / filename
+    if not old_original.exists():
+        return False, "原图不存在"
+
+    suffix = old_original.suffix
+    if Path(new_filename).suffix.lower() not in IMAGE_SUFFIXES:
+        new_filename = new_filename + suffix
+
+    if Path(new_filename).suffix.lower() != suffix.lower():
+        return False, "不能修改文件格式"
+
+    new_filename = _readable_filename(new_filename)
+    new_original = EMOJI_DIR / new_filename
+    new_thumbnail = EMOJI_SMALL_DIR / new_filename
+    if new_original.exists() or new_thumbnail.exists():
+        return False, "同名表情已存在"
+
+    try:
+        old_original.rename(new_original)
+        if old_thumbnail.exists():
+            old_thumbnail.rename(new_thumbnail)
+    except OSError as error:
+        if new_original.exists() and not old_original.exists():
+            try:
+                new_original.rename(old_original)
+            except OSError:
+                pass
+        if new_thumbnail.exists() and not old_thumbnail.exists():
+            try:
+                new_thumbnail.rename(old_thumbnail)
+            except OSError:
+                pass
+        return False, str(error)
+
+    pinned_names = _load_pinned_names()
+    if filename in pinned_names:
+        pinned_names.discard(filename)
+        pinned_names.add(new_filename)
+        _save_pinned_names(pinned_names)
+
+    refresh_index()
+    return True, new_filename
+
+
 def clear_emojis():
     ensure_app_dirs()
     EMOJI_DIR.mkdir(parents=True, exist_ok=True)
@@ -175,6 +225,14 @@ def original_image_path(filename):
 
 def display_name_for_thumbnail(thumbnail_path):
     return _readable_filename(Path(thumbnail_path).name)
+
+
+def display_title_for_thumbnail(thumbnail_path):
+    return Path(display_name_for_thumbnail(thumbnail_path)).stem
+
+
+def display_title_for_filename(filename):
+    return Path(_readable_filename(filename)).stem
 
 
 def is_pinned(filename):
