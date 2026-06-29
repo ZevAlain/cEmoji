@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: 'cEmoji'
-  text: '表情包外挂'
-  tagline: Teams表情包扩展工具 - 导入、管理、使用表情包的完整解决方案
+  text: 'Windows 表情包剪贴板工具'
+  tagline: 导入、搜索、置顶、复制和管理本地表情包的轻量工具
   image:
     src: /logo.webp
     alt: cEmoji
@@ -21,20 +21,20 @@ hero:
 
 features:
   - icon: 📦
-    title: '灵活导入'
-    details: '支持导入表情包图片和 ZIP 格式表情包，轻松扩展你的表情库'
+    title: '批量导入'
+    details: '支持 PNG、JPG、JPEG、GIF 图片和 ZIP 表情包，导入完成后显示成功、跳过和失败数量'
   - icon: 📌
-    title: '窗口置顶'
-    details: '当前窗口始终置顶，随时随地快速访问表情包'
+    title: '置顶和快捷呼出'
+    details: '窗口可始终置顶，支持全局快捷键呼出或隐藏主界面，置顶切换闪烁问题已修复'
   - icon: 📂
     title: '本地管理'
-    details: '本地表情包可选择删除，完全控制你的表情库'
+    details: '支持搜索、右键置顶、单个删除和一键清空所有表情包'
   - icon: 🖼️
-    title: '截图导入'
-    details: '集成剪贴板功能，支持使用 Snipaste 进行截屏并快速导入'
+    title: 'GIF 友好'
+    details: 'GIF 表情可复制动图，列表显示 GIF 角标，悬停一秒可预览播放'
   - icon: 🚀
-    title: '即用型工具'
-    details: '开箱即用的用户界面，无需复杂配置'
+    title: '性能优化'
+    details: '使用模型视图列表、缩略图缓存、后台导入和内容去重，减少卡顿和重复表情'
   - icon: 📝
     title: '开源项目'
     details: 'GNU General Public License v3.0 许可证，代码完全开源'
@@ -42,16 +42,11 @@ features:
 
 ## 🎯 主要功能
 
-### 已实现
-- ✅ 导入表情包图片
-- ✅ 当前窗口始终置顶
-- ✅ 导入 ZIP 格式表情包
-- ✅ 本地表情包可选择删除
-
-### 开发中
-- 🔄 表情包多标签管理
-- 🔄 表情包云存储连接
-- 🔄 自定义制作表情包
+- 导入图片、ZIP 和剪贴板图片。
+- 点击表情复制到剪贴板，GIF 保留动图。
+- 搜索、置顶、删除和清空本地表情。
+- 支持全局快捷键呼出或隐藏主界面。
+- “始终置顶”切换闪烁问题已经修复。
 
 ## 💡 快速了解
 
@@ -62,30 +57,18 @@ git clone https://github.com/ZevAlain/cEmoji.git
 # 进入项目目录
 cd cEmoji
 
-# 查看 Wiki 了解使用方法
-# https://github.com/ZevAlain/cEmoji/wiki
+# 运行源码版本
+pip install -r requirements.txt
+python cEmoji.py
 ```
 
 ## 🔧 工具要求
 
-### 截图辅助工具
-
-我们推荐使用 [Snipaste](https://www.snipaste.com/) 进行表情包截屏：
-
-1. 下载并安装 Snipaste
-2. 使用 Snipaste 对表情包进行截屏
-3. 点击 cEmoji 中的"读取剪切板"按钮
-4. 截屏将被保存，在选择界面进行选择
-
-[📥 Snipaste 下载](https://www.snipaste.com/download.html)
-
-## ⚠️ 已知问题
-
-- [ ] 点击始终置顶按钮会闪屏
+截图导入只要求剪贴板里有图片。可以使用 [Snipaste](https://www.snipaste.com/) 或 Windows 自带截图工具。
 
 ## 📞 获取帮助
 
-更多使用详情请参考 [GitHub Wiki](https://github.com/ZevAlain/cEmoji/wiki)
+遇到问题请到 [GitHub Issues](https://github.com/ZevAlain/cEmoji/issues) 反馈。
 
 ## 📄 许可证
 
