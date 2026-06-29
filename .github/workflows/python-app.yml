@@ -45,8 +45,6 @@ jobs:
         Copy-Item .\resource\* cEmoji\app\ -Recurse -Force
         New-Item -ItemType Directory -Force cEmoji\app\etc | Out-Null
         Copy-Item .\etc\* cEmoji\app\etc\ -Force
-        New-Item -ItemType Directory -Force cEmoji\app\bin | Out-Null
-        Copy-Item .\bin\* cEmoji\app\bin\ -Force
         .\lib\7za.exe a cEmoji.zip cEmoji
         .\lib\7za.exe a cEmoji_LZMA.7z cEmoji -m0=lzma2 -mx=9 
         .\lib\7za.exe l cEmoji.zip
