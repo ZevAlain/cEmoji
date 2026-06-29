@@ -1,6 +1,7 @@
 import base64
 import ctypes
 from ctypes import wintypes
+from datetime import datetime
 import os
 from pathlib import Path
 import re
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QCheckBox,
+    QFileDialog,
     QLabel,
     QLineEdit,
     QMenu,
@@ -23,8 +25,10 @@ from PySide6.QtWidgets import (
     QPushButton,
     QKeySequenceEdit,
     QSizePolicy,
+    QStyle,
     QSystemTrayIcon,
     QTabBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -149,6 +153,8 @@ class ImageViewer(QWidget):
         self.search_timer.setInterval(180)
         self.search_timer.timeout.connect(self.display_emoji)
         self.emoji_filter = "static"
+        self.emoji_sort_mode = "time"
+        self.emoji_sort_order = "desc"
 
         self.setWindowTitle("cEmoji")
         self.setFixedSize(500, 690)
@@ -215,9 +221,11 @@ class ImageViewer(QWidget):
         self.more_button = QPushButton("更多")
         self.more_menu = QMenu(self)
         self.about_action = QAction("关于", self)
+        self.export_action = QAction("导出所有表情包", self)
         self.clear_action = QAction("清空所有表情包", self)
         self.more_menu.addAction(self.about_action)
         self.more_menu.addSeparator()
+        self.more_menu.addAction(self.export_action)
         self.more_menu.addAction(self.clear_action)
         self.more_button.setMenu(self.more_menu)
 
@@ -229,6 +237,7 @@ class ImageViewer(QWidget):
         self.upload_button.clicked.connect(self.show_upload_dialog)
         self.manage_button.clicked.connect(self.show_manage_dialog)
         self.about_action.triggered.connect(self.show_about_dialog)
+        self.export_action.triggered.connect(self.export_all_emojis)
         self.clear_action.triggered.connect(self.clear_all_emojis)
 
     def setup_search(self):
@@ -238,13 +247,44 @@ class ImageViewer(QWidget):
         self.main_layout.addWidget(self.search_bar)
 
     def setup_filter_tabs(self):
+        self.filter_bar_layout = QHBoxLayout()
+        self.filter_bar_layout.setSpacing(8)
+        self.main_layout.addLayout(self.filter_bar_layout)
+
         self.filter_tabs = QTabBar(self)
         self.filter_tabs.setObjectName("EmojiFilterTabs")
         self.filter_tabs.setDrawBase(False)
         self.filter_tabs.addTab("表情包")
         self.filter_tabs.addTab("动态表情包")
         self.filter_tabs.currentChanged.connect(self.on_filter_tab_changed)
-        self.main_layout.addWidget(self.filter_tabs)
+        self.filter_bar_layout.addWidget(self.filter_tabs, stretch=1)
+
+        self.sort_button = QToolButton(self)
+        self.sort_button.setObjectName("SortButton")
+        self.sort_button.setFixedSize(86, 36)
+        self.sort_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.sort_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.sort_menu = QMenu(self)
+        self.sort_by_time_action = QAction("按时间排序", self)
+        self.sort_by_time_action.setCheckable(True)
+        self.sort_by_name_action = QAction("按名称排序", self)
+        self.sort_by_name_action.setCheckable(True)
+        self.sort_ascending_action = QAction("升序", self)
+        self.sort_ascending_action.setCheckable(True)
+        self.sort_descending_action = QAction("降序", self)
+        self.sort_descending_action.setCheckable(True)
+        self.sort_menu.addAction(self.sort_by_time_action)
+        self.sort_menu.addAction(self.sort_by_name_action)
+        self.sort_menu.addSeparator()
+        self.sort_menu.addAction(self.sort_ascending_action)
+        self.sort_menu.addAction(self.sort_descending_action)
+        self.sort_button.setMenu(self.sort_menu)
+        self.sort_by_time_action.triggered.connect(lambda: self.set_emoji_sort_mode("time"))
+        self.sort_by_name_action.triggered.connect(lambda: self.set_emoji_sort_mode("name"))
+        self.sort_ascending_action.triggered.connect(lambda: self.set_emoji_sort_order("asc"))
+        self.sort_descending_action.triggered.connect(lambda: self.set_emoji_sort_order("desc"))
+        self.update_sort_button()
+        self.filter_bar_layout.addWidget(self.sort_button)
 
     def setup_emoji_view(self):
         self.emoji_view = cEmojiWidgets.EmojiListWidget(self)
@@ -519,6 +559,33 @@ class ImageViewer(QWidget):
     def save_hide_after_copy(self, checked):
         self.set_config_value("hide_after_copy", checked)
 
+    def export_all_emojis(self):
+        if emoji_store.count_emojis() == 0:
+            message_box.information(self, "导出表情包", "当前没有可导出的表情包")
+            return
+
+        default_name = f"cEmoji_emojis_{datetime.now():%Y%m%d_%H%M%S}.zip"
+        default_path = Path.home() / default_name
+        archive_path, _ = QFileDialog.getSaveFileName(self, "导出所有表情包", str(default_path), "ZIP files (*.zip)")
+        if not archive_path:
+            return
+
+        archive_path = Path(archive_path)
+        if archive_path.suffix.lower() != ".zip":
+            archive_path = archive_path.with_suffix(".zip")
+
+        try:
+            exported = emoji_store.export_emojis(archive_path)
+        except OSError as error:
+            message_box.warning(self, "导出失败", str(error))
+            return
+
+        if exported == 0:
+            message_box.information(self, "导出表情包", "当前没有可导出的表情包")
+            return
+
+        message_box.information(self, "导出完成", f"已导出 {exported} 个表情包到：\n{archive_path}")
+
     def clear_all_emojis(self):
         if not message_box.question(self, "确认清空", "确定要清空全部表情包吗？"):
             return
@@ -600,9 +667,59 @@ class ImageViewer(QWidget):
     def filtered_emojis(self, search_text=""):
         image_paths = emoji_store.list_emojis(search_text)
         if self.emoji_filter == "animated":
-            return [path for path in image_paths if path.suffix.lower() == ".gif"]
+            return self.sorted_emojis([path for path in image_paths if path.suffix.lower() == ".gif"])
 
-        return [path for path in image_paths if path.suffix.lower() != ".gif"]
+        return self.sorted_emojis([path for path in image_paths if path.suffix.lower() != ".gif"])
+
+    def sorted_emojis(self, image_paths):
+        pinned_paths = []
+        normal_paths = []
+        for image_path in image_paths:
+            filename = emoji_store.display_name_for_thumbnail(image_path)
+            if emoji_store.is_pinned(filename):
+                pinned_paths.append(image_path)
+            else:
+                normal_paths.append(image_path)
+
+        reverse = self.emoji_sort_order == "desc"
+        if self.emoji_sort_mode == "name":
+            return sorted(pinned_paths, key=self.emoji_name_sort_key, reverse=reverse) + sorted(normal_paths, key=self.emoji_name_sort_key, reverse=reverse)
+
+        return sorted(pinned_paths, key=self.emoji_time_sort_key, reverse=reverse) + sorted(normal_paths, key=self.emoji_time_sort_key, reverse=reverse)
+
+    @staticmethod
+    def emoji_name_sort_key(image_path):
+        return emoji_store.display_title_for_thumbnail(image_path).casefold()
+
+    @staticmethod
+    def emoji_time_sort_key(image_path):
+        filename = emoji_store.display_name_for_thumbnail(image_path)
+        original_path = emoji_store.original_image_path(filename)
+        time_path = original_path if original_path.exists() else image_path
+        return time_path.stat().st_ctime
+
+    def set_emoji_sort_mode(self, mode):
+        self.emoji_sort_mode = "name" if mode == "name" else "time"
+        self.update_sort_button()
+        self.display_emoji()
+
+    def set_emoji_sort_order(self, order):
+        self.emoji_sort_order = "asc" if order == "asc" else "desc"
+        self.update_sort_button()
+        self.display_emoji()
+
+    def update_sort_button(self):
+        ascending = self.emoji_sort_order == "asc"
+        icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp if ascending else QStyle.StandardPixmap.SP_ArrowDown)
+        mode_label = "名称" if self.emoji_sort_mode == "name" else "时间"
+        order_label = "升序" if ascending else "降序"
+        self.sort_button.setIcon(icon)
+        self.sort_button.setText(mode_label)
+        self.sort_button.setToolTip(f"排序：{mode_label}，{order_label}")
+        self.sort_by_time_action.setChecked(self.emoji_sort_mode == "time")
+        self.sort_by_name_action.setChecked(self.emoji_sort_mode == "name")
+        self.sort_ascending_action.setChecked(ascending)
+        self.sort_descending_action.setChecked(not ascending)
 
     def on_filter_tab_changed(self, index):
         self.emoji_filter = "animated" if index == 1 else "static"

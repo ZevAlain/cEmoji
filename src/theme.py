@@ -121,6 +121,27 @@ def window_stylesheet(mode):
             color: {color["accent_hover"]};
             border-color: {color["accent"]};
         }}
+        QToolButton#SortButton {{
+            background: {color["panel"]};
+            border: 1px solid {color["border"]};
+            border-radius: 9px;
+            color: {color["muted"]};
+            padding: 6px 10px;
+        }}
+        QToolButton#SortButton:hover {{
+            background: {color["panel_alt"]};
+            color: {color["text"]};
+            border-color: {color["border_strong"]};
+        }}
+        QToolButton#SortButton:pressed, QToolButton#SortButton:checked {{
+            background: {color["accent_soft"]};
+            color: {color["accent_hover"]};
+            border-color: {color["accent"]};
+        }}
+        QToolButton#SortButton::menu-indicator {{
+            image: none;
+            width: 0;
+        }}
         QLineEdit {{
             background: {color["panel"]};
             border: 1px solid {color["border"]};

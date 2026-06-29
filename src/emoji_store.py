@@ -219,6 +219,20 @@ def clear_emojis():
     return removed
 
 
+def export_emojis(archive_path):
+    ensure_app_dirs()
+    image_paths = sorted(path for path in EMOJI_DIR.iterdir() if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES)
+    if not image_paths:
+        return 0
+
+    archive_path = Path(archive_path)
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        for image_path in image_paths:
+            archive.write(image_path, image_path.name)
+    return len(image_paths)
+
+
 def original_image_path(filename):
     return EMOJI_DIR / filename
 
