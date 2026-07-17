@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  schedule:
+    - cron: '0 19 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,6 +23,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate cloud emoji index
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/generate_cloud_index.py
 
       - uses: actions/setup-node@v4
         with:

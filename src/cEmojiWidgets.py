@@ -206,11 +206,14 @@ class EmojiListWidget(QListView):
 
     def set_emojis(self, image_paths):
         self.stop_hover_movie()
+        scrollbar = self.verticalScrollBar()
+        scroll_position = scrollbar.value()
         self.setUpdatesEnabled(False)
         try:
             self.emoji_model.set_paths(image_paths)
         finally:
             self.setUpdatesEnabled(True)
+            scrollbar.setValue(min(scroll_position, scrollbar.maximum()))
             self.viewport().update()
 
     def set_empty_message(self, message):

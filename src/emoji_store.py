@@ -233,6 +233,14 @@ def export_emojis(archive_path):
     return len(image_paths)
 
 
+def existing_image_hashes():
+    return _existing_image_hashes()
+
+
+def image_content_hash(path):
+    return _image_content_hash(Path(path))
+
+
 def original_image_path(filename):
     return EMOJI_DIR / filename
 

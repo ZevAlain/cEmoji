@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QKeySequenceEdit,
     QSizePolicy,
-    QStyle,
     QSystemTrayIcon,
     QTabBar,
     QToolButton,
@@ -221,10 +220,12 @@ class ImageViewer(QWidget):
         self.more_button = QPushButton("更多")
         self.more_menu = QMenu(self)
         self.about_action = QAction("关于", self)
+        self.cloud_library_action = QAction("云端表情包库", self)
         self.export_action = QAction("导出所有表情包", self)
         self.clear_action = QAction("清空所有表情包", self)
         self.more_menu.addAction(self.about_action)
         self.more_menu.addSeparator()
+        self.more_menu.addAction(self.cloud_library_action)
         self.more_menu.addAction(self.export_action)
         self.more_menu.addAction(self.clear_action)
         self.more_button.setMenu(self.more_menu)
@@ -237,6 +238,7 @@ class ImageViewer(QWidget):
         self.upload_button.clicked.connect(self.show_upload_dialog)
         self.manage_button.clicked.connect(self.show_manage_dialog)
         self.about_action.triggered.connect(self.show_about_dialog)
+        self.cloud_library_action.triggered.connect(self.show_cloud_library)
         self.export_action.triggered.connect(self.export_all_emojis)
         self.clear_action.triggered.connect(self.clear_all_emojis)
 
@@ -537,6 +539,12 @@ class ImageViewer(QWidget):
 
         cEmojiDialogs.show_upload_dialog(self)
 
+    def show_cloud_library(self):
+        from src.cloud_emoji_dialog import CloudEmojiDialog
+
+        dialog = CloudEmojiDialog(self)
+        dialog.exec()
+
     def show_manage_dialog(self):
         if self.app_config.delete_flag == 0:
             self.set_config_value("delete_flag", 1)
@@ -710,11 +718,10 @@ class ImageViewer(QWidget):
 
     def update_sort_button(self):
         ascending = self.emoji_sort_order == "asc"
-        icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp if ascending else QStyle.StandardPixmap.SP_ArrowDown)
         mode_label = "名称" if self.emoji_sort_mode == "name" else "时间"
         order_label = "升序" if ascending else "降序"
-        self.sort_button.setIcon(icon)
-        self.sort_button.setText(mode_label)
+        self.sort_button.setIcon(QIcon())
+        self.sort_button.setText(f"{mode_label}⌄")
         self.sort_button.setToolTip(f"排序：{mode_label}，{order_label}")
         self.sort_by_time_action.setChecked(self.emoji_sort_mode == "time")
         self.sort_by_name_action.setChecked(self.emoji_sort_mode == "name")
