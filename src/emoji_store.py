@@ -36,7 +36,7 @@ def count_emojis():
 
 def list_emojis(search_text="", collection_id=None):
     query = search_text.lower()
-    collection_names = collection_store.filenames_for_collection(collection_id)
+    collection_names = collection_store.filenames_for_collection_snapshot(collection_id)
     paths = [path for path in get_emoji_index() if display_name_for_thumbnail(path) in collection_names]
     if not query:
         return paths
@@ -242,16 +242,27 @@ def clear_emojis():
 
 
 def clear_collection_emojis(collection_id):
-    filenames = list(collection_store.filenames_for_collection(collection_id))
+    filenames, removed_from_collection = collection_store.clear_collection_members(collection_id)
     removed_files = 0
-    removed_from_collection = 0
+    removed_names = []
     for filename in filenames:
-        collection_ids = collection_store.file_collection_ids(filename)
-        if len(collection_ids) > 1:
-            if collection_store.remove_file_from_collection(filename, collection_id):
-                removed_from_collection += 1
-        elif delete_emoji(filename):
+        removed = False
+        for folder in (EMOJI_DIR, EMOJI_SMALL_DIR):
+            path = folder / filename
+            if path.exists():
+                try:
+                    path.unlink()
+                except OSError:
+                    continue
+                removed = True
+        if removed:
+            removed_names.append(filename)
             removed_files += 1
+    if removed_names:
+        pinned_names = _load_pinned_names()
+        next_pinned_names = pinned_names.difference(removed_names)
+        if next_pinned_names != pinned_names:
+            _save_pinned_names(next_pinned_names)
     refresh_index()
     return removed_files, removed_from_collection
 

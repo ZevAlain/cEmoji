@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
-    QCheckBox,
     QFileDialog,
     QLabel,
     QLineEdit,
@@ -49,6 +48,7 @@ HWND_NOTOPMOST = -2
 SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
 SWP_SHOWWINDOW = 0x0040
+SW_RESTORE = 9
 GA_ROOT = 2
 WM_HOTKEY = 0x0312
 HOTKEY_ID = 1001
@@ -300,7 +300,7 @@ class ImageViewer(QWidget):
         self.manage_button = QPushButton("管理")
         self.manage_button.setObjectName("CompactButton")
         self.manage_button.setCheckable(True)
-        self.more_button = QPushButton("菜单")
+        self.more_button = QPushButton("菜单⌄")
         self.more_button.setObjectName("CompactButton")
         self.more_menu = QMenu(self)
         self.always_on_top_action = QAction("始终置顶", self)
@@ -366,7 +366,7 @@ class ImageViewer(QWidget):
         self.secondary_collection_button.customContextMenuRequested.connect(lambda position: self.show_collection_actions_menu(self.secondary_collection_id, self.secondary_collection_button.mapToGlobal(position)))
         self.top_bar_layout.addWidget(self.secondary_collection_button)
 
-        self.collection_more_button = QPushButton("更多", self)
+        self.collection_more_button = QPushButton("更多⌄", self)
         self.collection_more_button.setObjectName("CollectionButton")
         self.collection_more_button.setFixedHeight(34)
         self.collection_more_button.setFixedWidth(64)
@@ -376,8 +376,9 @@ class ImageViewer(QWidget):
         self.refresh_collection_tabs()
 
     def refresh_collection_tabs(self):
-        collections = collection_store.collections()
-        active_id = self.current_collection_id if collection_store.set_active_collection(self.current_collection_id) else collection_store.active_collection_id()
+        collections = collection_store.collections_snapshot()
+        collection_ids = {collection.id for collection in collections}
+        active_id = self.current_collection_id if self.current_collection_id in collection_ids else collection_store.active_collection_id_snapshot()
         self.current_collection_id = active_id
         non_local = [collection for collection in collections if collection.id != collection_store.DEFAULT_COLLECTION_ID]
         if active_id != collection_store.DEFAULT_COLLECTION_ID:
@@ -461,6 +462,8 @@ class ImageViewer(QWidget):
     def select_collection(self, collection_id):
         if not collection_id:
             return
+        if collection_id == self.current_collection_id:
+            return
         self.current_collection_id = collection_id
         collection_store.set_active_collection(collection_id)
         self.refresh_collection_tabs()
@@ -527,13 +530,9 @@ class ImageViewer(QWidget):
         self.hotkey_edit.editingFinished.connect(self.save_hotkey)
         self.hotkey_status_label = QLabel("在这里输入快捷键来控制", self)
         self.hotkey_status_label.setObjectName("HotkeyStatusLabel")
-        self.hide_after_copy_checkbox = QCheckBox("复制后隐藏", self)
-        self.hide_after_copy_checkbox.setChecked(self.app_config.hide_after_copy)
-        self.hide_after_copy_checkbox.toggled.connect(self.save_hide_after_copy)
         self.shortcut_layout.addWidget(self.shortcut_label)
         self.shortcut_layout.addWidget(self.hotkey_edit)
         self.shortcut_layout.addWidget(self.hotkey_status_label, stretch=1)
-        self.shortcut_layout.addWidget(self.hide_after_copy_checkbox)
         self.main_layout.addWidget(self.shortcut_frame)
 
         self.footer_layout = QHBoxLayout()
@@ -789,14 +788,9 @@ class ImageViewer(QWidget):
     def on_emoji_copied(self, filename):
         self.copy_tip_label.setText(f"已复制：{emoji_store.display_title_for_filename(filename)}")
         self.copy_tip_reset_timer.start()
-        if self.app_config.hide_after_copy:
-            QTimer.singleShot(120, self.hide_to_tray)
 
     def reset_copy_tip(self):
         self.copy_tip_label.setText("鼠标左键单击图片可复制到剪切板，右键可置顶")
-
-    def save_hide_after_copy(self, checked):
-        self.set_config_value("hide_after_copy", checked)
 
     def export_current_collection(self):
         self.export_emojis(collection_id=self.current_collection_id, scope_name=collection_store.collection_name(self.current_collection_id), title="导出当前合集")
@@ -808,7 +802,7 @@ class ImageViewer(QWidget):
         if collection_id is None:
             has_items = emoji_store.count_emojis() > 0
         else:
-            has_items = bool(collection_store.filenames_for_collection(collection_id))
+            has_items = bool(collection_store.filenames_for_collection_snapshot(collection_id))
         if not has_items:
             message_box.information(self, "导出表情包", "当前没有可导出的表情包")
             return
@@ -838,7 +832,7 @@ class ImageViewer(QWidget):
 
     def clear_current_collection(self):
         name = collection_store.collection_name(self.current_collection_id)
-        count = len(collection_store.filenames_for_collection(self.current_collection_id))
+        count = len(collection_store.filenames_for_collection_snapshot(self.current_collection_id))
         if count == 0:
             message_box.information(self, "清空合集", "当前合集没有表情包")
             return
@@ -916,7 +910,8 @@ class ImageViewer(QWidget):
     def display_emoji(self):
         search_text = self.search_bar.text()
         image_paths = self.filtered_emojis(search_text)
-        total_count = len(self.filtered_emojis())
+        total_count = len(image_paths) if not search_text else len(self.filtered_emojis())
+        collection_count = len(collection_store.filenames_for_collection_snapshot(self.current_collection_id))
         if emoji_store.count_emojis() == 0:
             self.emoji_view.set_empty_message("还没有表情，点击“上传”导入图片或 ZIP")
         elif total_count == 0:
@@ -926,7 +921,7 @@ class ImageViewer(QWidget):
         else:
             self.emoji_view.set_empty_message("")
         self.emoji_view.set_emojis(image_paths)
-        self.update_search_placeholder()
+        self.update_search_placeholder(len(image_paths) if not search_text else total_count, collection_count)
 
     def filtered_emojis(self, search_text=""):
         image_paths = emoji_store.list_emojis(search_text, self.current_collection_id)
@@ -991,10 +986,13 @@ class ImageViewer(QWidget):
     def schedule_display_emoji(self):
         self.search_timer.start()
 
-    def update_search_placeholder(self):
-        count = len(self.filtered_emojis())
-        label = "动态表情数量" if self.emoji_filter == "animated" else "表情数量"
-        search_message = f"输入表情标题搜索(当前{label}: {count})"
+    def update_search_placeholder(self, count=None, collection_count=None):
+        if count is None:
+            count = len(self.filtered_emojis())
+        if collection_count is None:
+            collection_count = len(collection_store.filenames_for_collection_snapshot(self.current_collection_id))
+        label = "GIF" if self.emoji_filter == "animated" else "当前"
+        search_message = f"搜标题｜合集 {collection_count}｜{label} {count}"
         self.search_bar.setPlaceholderText(search_message)
 
 

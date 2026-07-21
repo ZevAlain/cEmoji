@@ -100,8 +100,8 @@ def window_stylesheet(mode):
             image: none;
         }}
         QPushButton#CollectionButton {{
-            background: transparent;
-            border: 1px solid transparent;
+            background: {color["panel"]};
+            border: 1px solid {color["border"]};
             border-radius: 17px;
             color: {color["muted"]};
             min-height: 20px;
@@ -259,14 +259,14 @@ def window_stylesheet(mode):
             color: {color["accent"]};
         }}
         QMenu {{
-            background: {color["panel"]};
-            border: 1px solid {color["border"]};
-            border-radius: 10px;
-            padding: 6px;
+            background: {color["panel_solid"]};
+            border: 1px solid {color["border_strong"]};
+            border-radius: 8px;
+            padding: 5px;
             color: {color["text"]};
         }}
         QMenu::item {{
-            padding: 7px 24px 7px 10px;
+            padding: 7px 26px 7px 12px;
             border-radius: 6px;
         }}
         QMenu::item:selected {{

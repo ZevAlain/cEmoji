@@ -169,22 +169,33 @@ def collections():
     return [Collection(collection["id"], collection["name"], collection.get("created_at", 0)) for collection in data["collections"]]
 
 
+def collections_snapshot():
+    data = ensure_initialized(assign_missing=False)
+    return [Collection(collection["id"], collection["name"], collection.get("created_at", 0)) for collection in data["collections"]]
+
+
 def active_collection_id():
     return ensure_initialized()["active_collection_id"]
 
 
+def active_collection_id_snapshot():
+    return ensure_initialized(assign_missing=False)["active_collection_id"]
+
+
 def set_active_collection(collection_id):
-    data = ensure_initialized()
+    data = ensure_initialized(assign_missing=False)
     ids = {collection["id"] for collection in data["collections"]}
     if collection_id not in ids:
         return False
+    if data["active_collection_id"] == collection_id:
+        return True
     data["active_collection_id"] = collection_id
     save_data(data)
     return True
 
 
 def collection_name(collection_id):
-    for collection in collections():
+    for collection in collections_snapshot():
         if collection.id == collection_id:
             return collection.name
     return DEFAULT_COLLECTION_NAME
@@ -230,8 +241,8 @@ def rename_collection(collection_id, name):
 def delete_collection(collection_id):
     if collection_id == DEFAULT_COLLECTION_ID:
         return []
-    data = ensure_initialized()
-    filenames = filenames_for_collection(collection_id)
+    data = ensure_initialized(assign_missing=False)
+    filenames = [filename for filename, collection_ids in data["items"].items() if collection_id in collection_ids]
     data["collections"] = [collection for collection in data["collections"] if collection["id"] != collection_id]
     for filename in list(data["items"]):
         ids = [item_id for item_id in data["items"][filename] if item_id != collection_id]
@@ -243,6 +254,24 @@ def delete_collection(collection_id):
         data["active_collection_id"] = DEFAULT_COLLECTION_ID
     save_data(data)
     return filenames
+
+
+def clear_collection_members(collection_id):
+    data = ensure_initialized(assign_missing=False)
+    filenames = [filename for filename, collection_ids in data["items"].items() if collection_id in collection_ids]
+    removed_from_collection = 0
+    removed_files = []
+    for filename in filenames:
+        ids = data["items"].get(filename, [])
+        if len(ids) > 1:
+            data["items"][filename] = [item_id for item_id in ids if item_id != collection_id]
+            removed_from_collection += 1
+        else:
+            data["items"].pop(filename, None)
+            removed_files.append(filename)
+    if filenames:
+        save_data(data)
+    return removed_files, removed_from_collection
 
 
 def add_file_to_collection(filename, collection_id=None):
@@ -301,6 +330,12 @@ def rename_file(old_filename, new_filename):
 def filenames_for_collection(collection_id=None):
     collection_id = collection_id or active_collection_id()
     data = ensure_initialized()
+    return {filename for filename, collection_ids in data["items"].items() if collection_id in collection_ids}
+
+
+def filenames_for_collection_snapshot(collection_id=None):
+    collection_id = collection_id or active_collection_id_snapshot()
+    data = ensure_initialized(assign_missing=False)
     return {filename for filename, collection_ids in data["items"].items() if collection_id in collection_ids}
 
 
