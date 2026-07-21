@@ -1,0 +1,7 @@
+*.pyc
+__pycache__/
+.venv/
+etc/cloud_downloaded_items.json
+etc/cloud_library_cache.json
+etc/cloud_preview_cache/
+etc/local_collections.json

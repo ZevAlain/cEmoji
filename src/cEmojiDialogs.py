@@ -64,7 +64,8 @@ def upload_zip(self):
 
 
 def start_import(self, import_func, filenames):
-    worker = ImportWorker(import_func, filenames)
+    collection_id = getattr(self, "current_collection_id", None)
+    worker = ImportWorker(lambda items, progress: import_func(items, progress, collection_id), filenames)
     if not hasattr(self, "_active_imports"):
         self._active_imports = []
     self._active_imports.append(worker)
@@ -98,7 +99,7 @@ def start_import(self, import_func, filenames):
         message_box.information(
             self,
             "导入完成",
-            f"成功导入：{summary.imported} 个\n已存在跳过：{summary.skipped} 个\n失败：{summary.failed} 个",
+            f"成功导入：{summary.imported} 个\n已存在跳过：{summary.skipped} 个\n加入当前合集：{summary.added_to_collection} 个\n失败：{summary.failed} 个",
         )
 
     def fail_import(message):
@@ -131,7 +132,7 @@ def import_clipboard_image(self):
 
     filename = clipboard_service.new_clipboard_filename()
     try:
-        emoji_store.import_clipboard_image(image, filename)
+        emoji_store.import_clipboard_image(image, filename, getattr(self, "current_collection_id", None))
     except Exception as error:
         message_box.warning(self, "导入失败", str(error))
         return

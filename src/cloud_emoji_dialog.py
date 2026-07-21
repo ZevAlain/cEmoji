@@ -1,7 +1,7 @@
 from pathlib import Path
 import tempfile
 
-from PySide6.QtCore import QByteArray, QBuffer, QIODevice, QObject, QRunnable, QSize, Qt, QThreadPool, QTimer, Signal, Slot
+from PySide6.QtCore import QByteArray, QBuffer, QEvent, QIODevice, QObject, QRunnable, QSize, Qt, QThreadPool, QTimer, Signal, Slot
 from PySide6.QtGui import QAction, QMovie, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -14,8 +14,10 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMenu,
+    QRadioButton,
     QProgressDialog,
     QPushButton,
+    QComboBox,
     QScrollArea,
     QSizePolicy,
     QTabBar,
@@ -23,12 +25,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src import cloud_emoji_service, emoji_store, message_box, theme
+from src import cloud_emoji_service, collection_store, emoji_store, message_box, theme
+from src.window_effects import apply_modern_window_effects
 
 
 PREVIEW_BATCH_SIZE = 30
 PREVIEW_SIZE = QSize(96, 96)
 GIF_PLAY_DELAY_MS = 350
+PACKAGE_NAME_ROLE = Qt.ItemDataRole.UserRole + 11
+PACKAGE_STATS_ROLE = Qt.ItemDataRole.UserRole + 12
 
 
 class WorkerSignals(QObject):
@@ -42,6 +47,63 @@ def emit_if_alive(signal, *args):
         signal.emit(*args)
     except RuntimeError:
         pass
+
+
+class MarqueeLabel(QLabel):
+    def __init__(self, text="", parent=None):
+        super().__init__(parent)
+        self.full_text = ""
+        self.scroll_index = 0
+        self.scroll_timer = QTimer(self)
+        self.scroll_timer.setInterval(220)
+        self.scroll_timer.timeout.connect(self.scroll_text)
+        self.set_full_text(text)
+
+    def set_full_text(self, text):
+        self.full_text = str(text)
+        self.setToolTip(self.full_text)
+        self.stop_scroll()
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        if self.needs_scroll():
+            self.scroll_index = 0
+            self.scroll_timer.start()
+            self.scroll_text()
+
+    def leaveEvent(self, event):
+        self.stop_scroll()
+        super().leaveEvent(event)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if not self.scroll_timer.isActive():
+            self.update_elided_text()
+
+    def available_width(self):
+        return max(40, self.width() - 8)
+
+    def needs_scroll(self):
+        return self.fontMetrics().horizontalAdvance(self.full_text) > self.available_width()
+
+    def stop_scroll(self):
+        self.scroll_timer.stop()
+        self.scroll_index = 0
+        self.update_elided_text()
+
+    def update_elided_text(self):
+        self.setText(self.fontMetrics().elidedText(self.full_text, Qt.TextElideMode.ElideRight, self.available_width()))
+
+    def scroll_text(self):
+        if not self.needs_scroll():
+            self.stop_scroll()
+            return
+        padded_text = f"{self.full_text}   {self.full_text}"
+        visible_text = padded_text[self.scroll_index:] + padded_text[:self.scroll_index]
+        while visible_text and self.fontMetrics().horizontalAdvance(visible_text) > self.available_width():
+            visible_text = visible_text[:-1]
+        self.setText(visible_text or self.full_text[:1])
+        self.scroll_index = (self.scroll_index + 1) % (len(self.full_text) + 3)
 
 
 class LoadIndexWorker(QRunnable):
@@ -81,10 +143,11 @@ class PreviewWorker(QRunnable):
 
 
 class ImportPackageWorker(QRunnable):
-    def __init__(self, package):
+    def __init__(self, package, collection_id):
         super().__init__()
         self.setAutoDelete(False)
         self.package = package
+        self.collection_id = collection_id
         self.signals = WorkerSignals()
 
     @Slot()
@@ -105,7 +168,7 @@ class ImportPackageWorker(QRunnable):
                     except Exception:
                         download_failed += 1
                     emit_if_alive(self.signals.progress, index, total, item.name)
-                summary = emoji_store.import_images(downloaded)
+                summary = emoji_store.import_images(downloaded, collection_id=self.collection_id)
                 summary.failed += download_failed
         except Exception as error:
             emit_if_alive(self.signals.failed, str(error))
@@ -114,10 +177,11 @@ class ImportPackageWorker(QRunnable):
 
 
 class ImportItemWorker(QRunnable):
-    def __init__(self, item):
+    def __init__(self, item, collection_id):
         super().__init__()
         self.setAutoDelete(False)
         self.item = item
+        self.collection_id = collection_id
         self.signals = WorkerSignals()
 
     @Slot()
@@ -127,7 +191,7 @@ class ImportItemWorker(QRunnable):
                 temp_path = Path(temp_dir)
                 downloaded = cloud_emoji_service.download_emoji_to(self.item, temp_path)
                 content_hash = emoji_store.image_content_hash(downloaded)
-                summary = emoji_store.import_images([downloaded])
+                summary = emoji_store.import_images([downloaded], collection_id=self.collection_id)
         except Exception as error:
             emit_if_alive(self.signals.failed, str(error))
             return
@@ -135,10 +199,11 @@ class ImportItemWorker(QRunnable):
 
 
 class ImportItemsWorker(QRunnable):
-    def __init__(self, items):
+    def __init__(self, items, collection_id):
         super().__init__()
         self.setAutoDelete(False)
         self.items = list(items)
+        self.collection_id = collection_id
         self.signals = WorkerSignals()
 
     @Slot()
@@ -159,7 +224,7 @@ class ImportItemsWorker(QRunnable):
                     except Exception:
                         download_failed += 1
                     emit_if_alive(self.signals.progress, index, total, item.name)
-                summary = emoji_store.import_images(downloaded)
+                summary = emoji_store.import_images(downloaded, collection_id=self.collection_id)
                 summary.failed += download_failed
         except Exception as error:
             emit_if_alive(self.signals.failed, str(error))
@@ -188,6 +253,11 @@ class CloudEmojiDialog(QDialog):
         self.active_preview_workers = []
         self.active_workers = []
         self.theme_mode = theme.system_theme_mode(self.palette())
+        self.hovered_package_item = None
+        self.package_name_scroll_index = 0
+        self.package_name_scroll_timer = QTimer(self)
+        self.package_name_scroll_timer.setInterval(220)
+        self.package_name_scroll_timer.timeout.connect(self.scroll_hovered_package_name)
 
         self.setup_ui()
         self.apply_theme()
@@ -200,6 +270,8 @@ class CloudEmojiDialog(QDialog):
 
         self.status_label = QLabel("正在加载云端索引...", self)
         self.status_label.setObjectName("CloudStatusLabel")
+        self.status_label.setOpenExternalLinks(True)
+        self.status_label.setWordWrap(True)
         self.root_layout.addWidget(self.status_label)
 
         self.content_layout = QHBoxLayout()
@@ -222,7 +294,11 @@ class CloudEmojiDialog(QDialog):
         self.package_list.setObjectName("CloudPackageList")
         self.package_list.setFixedWidth(230)
         self.package_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.package_list.setMouseTracking(True)
+        self.package_list.viewport().setMouseTracking(True)
+        self.package_list.viewport().installEventFilter(self)
         self.package_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.package_list.itemEntered.connect(self.on_package_item_hovered)
         self.package_list.currentRowChanged.connect(self.on_package_selected)
         self.left_panel.addWidget(self.package_list, stretch=1)
 
@@ -233,7 +309,7 @@ class CloudEmojiDialog(QDialog):
         self.preview_layout.setSpacing(10)
         self.content_layout.addWidget(self.preview_panel, stretch=1)
 
-        self.package_title = QLabel("选择一个云端合集", self)
+        self.package_title = MarqueeLabel("选择一个云端合集", self)
         self.package_title.setObjectName("CloudPackageTitle")
         self.preview_layout.addWidget(self.package_title)
 
@@ -284,6 +360,7 @@ class CloudEmojiDialog(QDialog):
 
     def apply_theme(self):
         self.setStyleSheet(theme.window_stylesheet(self.theme_mode) + cloud_dialog_stylesheet(self.theme_mode))
+        apply_modern_window_effects(self, self.theme_mode)
 
     def schedule_package_filter(self):
         self.search_timer.start(260)
@@ -303,7 +380,12 @@ class CloudEmojiDialog(QDialog):
         self.packages = list(packages)
         self.refresh_button.setEnabled(True)
         source_label = {"remote": "远端", "cache": "缓存", "stale-cache": "缓存", "local": "本地"}.get(source, source)
-        self.status_label.setText(f"已加载 {len(self.packages)} 个云端合集（{source_label}索引）")
+        total_items = sum(package.count for package in self.packages)
+        self.status_label.setText(
+            f"已加载 {len(self.packages)} 个云端合集，共收集 {total_items} 个表情包（{source_label}索引）。"
+            "欢迎向 <a href='https://github.com/ZevAlain/EmojiPackage/pulls'>EmojiPackage 提交 PR</a> 补充内容；"
+            "如有不适内容，请提交 <a href='https://github.com/ZevAlain/EmojiPackage/issues'>Issue</a> 反馈。"
+        )
         self.apply_package_filter()
 
     def on_index_failed(self, message):
@@ -321,6 +403,7 @@ class CloudEmojiDialog(QDialog):
         self.refresh_current_items()
 
     def apply_package_filter(self):
+        self.stop_package_name_scroll()
         query = self.search_input.text().strip().lower()
         if not query:
             self.filtered_packages = list(self.packages)
@@ -332,7 +415,11 @@ class CloudEmojiDialog(QDialog):
             ]
         self.package_list.clear()
         for package in self.filtered_packages:
-            item = QListWidgetItem(f"{package.name}\n{package.count} 个 / GIF {package.gif_count}")
+            item = QListWidgetItem()
+            item.setData(PACKAGE_NAME_ROLE, package.name)
+            item.setData(PACKAGE_STATS_ROLE, f"{package.count} 个 / GIF {package.gif_count}")
+            item.setToolTip(package.name)
+            self.update_package_item_text(item)
             self.package_list.addItem(item)
         if self.filtered_packages:
             self.package_list.setCurrentRow(0)
@@ -340,7 +427,7 @@ class CloudEmojiDialog(QDialog):
             self.current_package = None
             self.current_items = []
             self.clear_grid()
-            self.package_title.setText("没有匹配的云端合集")
+            self.package_title.set_full_text("没有匹配的云端合集")
             self.update_preview_count()
 
     def on_filter_changed(self, index):
@@ -375,8 +462,57 @@ class CloudEmojiDialog(QDialog):
         self.selected_preview_cards = set()
         self.update_download_selected_button()
         self.clear_grid()
-        self.package_title.setText(f"{self.current_package.name}  -  {filter_label} {len(self.current_items)} 个")
+        self.package_title.set_full_text(f"{self.current_package.name}  -  {filter_label} {len(self.current_items)} 个")
         self.load_more_previews()
+
+    def eventFilter(self, watched, event):
+        if watched == self.package_list.viewport() and event.type() == QEvent.Type.Leave:
+            self.stop_package_name_scroll()
+        return super().eventFilter(watched, event)
+
+    def on_package_item_hovered(self, item):
+        if item is self.hovered_package_item:
+            return
+        self.stop_package_name_scroll()
+        self.hovered_package_item = item
+        self.package_name_scroll_index = 0
+        if self.package_item_needs_scroll(item):
+            self.package_name_scroll_timer.start()
+            self.scroll_hovered_package_name()
+
+    def stop_package_name_scroll(self):
+        self.package_name_scroll_timer.stop()
+        if self.hovered_package_item is not None:
+            self.update_package_item_text(self.hovered_package_item)
+        self.hovered_package_item = None
+        self.package_name_scroll_index = 0
+
+    def package_item_needs_scroll(self, item):
+        name = item.data(PACKAGE_NAME_ROLE) or ""
+        return self.package_list.fontMetrics().horizontalAdvance(name) > self.package_name_available_width()
+
+    def package_name_available_width(self):
+        return max(40, self.package_list.viewport().width() - 28)
+
+    def update_package_item_text(self, item, name=None):
+        full_name = item.data(PACKAGE_NAME_ROLE) or ""
+        stats = item.data(PACKAGE_STATS_ROLE) or ""
+        visible_name = name or self.package_list.fontMetrics().elidedText(full_name, Qt.TextElideMode.ElideRight, self.package_name_available_width())
+        item.setText(f"{visible_name}\n{stats}")
+
+    def scroll_hovered_package_name(self):
+        item = self.hovered_package_item
+        if item is None or not self.package_item_needs_scroll(item):
+            self.stop_package_name_scroll()
+            return
+        full_name = item.data(PACKAGE_NAME_ROLE) or ""
+        padded_name = f"{full_name}   {full_name}"
+        visible_name = padded_name[self.package_name_scroll_index:] + padded_name[:self.package_name_scroll_index]
+        available_width = self.package_name_available_width()
+        while visible_name and self.package_list.fontMetrics().horizontalAdvance(visible_name) > available_width:
+            visible_name = visible_name[:-1]
+        self.update_package_item_text(item, visible_name or full_name[:1])
+        self.package_name_scroll_index = (self.package_name_scroll_index + 1) % (len(full_name) + 3)
 
     def clear_grid(self):
         while self.grid_layout.count():
@@ -449,7 +585,10 @@ class CloudEmojiDialog(QDialog):
         self.update_download_selected_button()
 
     def download_cloud_item(self, item):
-        worker = ImportItemWorker(item)
+        collection_id = self.choose_target_collection("下载云端表情", default_name=Path(item.name).stem, prefer_new=False)
+        if not collection_id:
+            return
+        worker = ImportItemWorker(item, collection_id)
         worker.signals.finished.connect(self.on_item_import_finished)
         worker.signals.failed.connect(self.on_item_import_failed)
         self.active_workers.append(worker)
@@ -466,8 +605,11 @@ class CloudEmojiDialog(QDialog):
                 card.set_downloaded(self.is_item_downloaded(item))
             parent = self.parent()
             if hasattr(parent, "display_emoji"):
+                if hasattr(parent, "refresh_collection_tabs"):
+                    parent.current_collection_id = collection_store.active_collection_id()
+                    parent.refresh_collection_tabs()
                 parent.display_emoji()
-        message_box.information(self, "下载完成", f"成功导入：{summary.imported} 个\n已存在跳过：{summary.skipped} 个\n失败：{summary.failed} 个")
+        message_box.information(self, "下载完成", f"成功导入：{summary.imported} 个\n已存在跳过：{summary.skipped} 个\n加入合集：{summary.added_to_collection} 个\n失败：{summary.failed} 个")
 
     def on_item_import_failed(self, message):
         self.cleanup_workers()
@@ -477,13 +619,16 @@ class CloudEmojiDialog(QDialog):
         items = [card.item for card in self.selected_preview_cards]
         if not items:
             return
+        collection_id = self.choose_target_collection("下载选中表情", default_name="新合集", prefer_new=False)
+        if not collection_id:
+            return
         self.download_selected_button.setEnabled(False)
         self.progress_dialog = QProgressDialog("准备下载...", "后台导入中", 0, len(items), self)
         self.progress_dialog.setWindowTitle("下载选中表情")
         self.progress_dialog.setCancelButton(None)
         self.progress_dialog.setAutoClose(False)
         self.progress_dialog.show()
-        worker = ImportItemsWorker(items)
+        worker = ImportItemsWorker(items, collection_id)
         worker.signals.progress.connect(self.on_import_progress)
         worker.signals.finished.connect(self.on_selected_import_finished)
         worker.signals.failed.connect(self.on_selected_import_failed)
@@ -498,8 +643,11 @@ class CloudEmojiDialog(QDialog):
         self.mark_items_downloaded(items, item_hashes)
         parent = self.parent()
         if hasattr(parent, "display_emoji"):
+            if hasattr(parent, "refresh_collection_tabs"):
+                parent.current_collection_id = collection_store.active_collection_id()
+                parent.refresh_collection_tabs()
             parent.display_emoji()
-        message_box.information(self, "下载完成", f"成功导入：{summary.imported} 个\n已存在跳过：{summary.skipped} 个\n失败：{summary.failed} 个")
+        message_box.information(self, "下载完成", f"成功导入：{summary.imported} 个\n已存在跳过：{summary.skipped} 个\n加入合集：{summary.added_to_collection} 个\n失败：{summary.failed} 个")
 
     def on_selected_import_failed(self, message):
         self.cleanup_workers()
@@ -535,6 +683,9 @@ class CloudEmojiDialog(QDialog):
     def import_current_package(self):
         if self.current_package is None:
             return
+        collection_id = self.choose_target_collection("导入云端合集", default_name=self.current_package.name, prefer_new=True)
+        if not collection_id:
+            return
         if self.current_package.count > 300:
             if not message_box.question(self, "导入云端合集", f"该合集包含 {self.current_package.count} 个文件，导入可能需要较长时间，是否继续？"):
                 return
@@ -544,12 +695,63 @@ class CloudEmojiDialog(QDialog):
         self.progress_dialog.setCancelButton(None)
         self.progress_dialog.setAutoClose(False)
         self.progress_dialog.show()
-        worker = ImportPackageWorker(self.current_package)
+        worker = ImportPackageWorker(self.current_package, collection_id)
         worker.signals.progress.connect(self.on_import_progress)
         worker.signals.finished.connect(self.on_import_finished)
         worker.signals.failed.connect(self.on_import_failed)
         self.active_workers.append(worker)
         QThreadPool.globalInstance().start(worker)
+
+    def choose_target_collection(self, title, default_name, prefer_new):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        existing_radio = QRadioButton("合并到已有合集", dialog)
+        existing_combo = QComboBox(dialog)
+        for collection in collection_store.collections():
+            existing_combo.addItem(collection.name, collection.id)
+        current_parent = self.parent()
+        current_id = getattr(current_parent, "current_collection_id", collection_store.active_collection_id())
+        current_index = existing_combo.findData(current_id)
+        if current_index >= 0:
+            existing_combo.setCurrentIndex(current_index)
+
+        new_radio = QRadioButton("新建合集", dialog)
+        new_input = QLineEdit(dialog)
+        new_input.setText(collection_store.unique_collection_name(default_name))
+
+        if prefer_new:
+            new_radio.setChecked(True)
+        else:
+            existing_radio.setChecked(True)
+
+        button_row = QHBoxLayout()
+        ok_button = QPushButton("确定", dialog)
+        cancel_button = QPushButton("取消", dialog)
+        ok_button.clicked.connect(dialog.accept)
+        cancel_button.clicked.connect(dialog.reject)
+        button_row.addStretch(1)
+        button_row.addWidget(ok_button)
+        button_row.addWidget(cancel_button)
+
+        layout.addWidget(existing_radio)
+        layout.addWidget(existing_combo)
+        layout.addWidget(new_radio)
+        layout.addWidget(new_input)
+        layout.addLayout(button_row)
+        dialog.setStyleSheet(theme.window_stylesheet(self.theme_mode))
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        if new_radio.isChecked():
+            name = new_input.text().strip()
+            if not name:
+                return None
+            return collection_store.create_collection(name)
+        return existing_combo.currentData()
 
     def on_import_progress(self, current, total, name):
         self.progress_dialog.setMaximum(max(total, 1))
@@ -564,8 +766,11 @@ class CloudEmojiDialog(QDialog):
         self.mark_package_downloaded(package, item_hashes)
         parent = self.parent()
         if hasattr(parent, "display_emoji"):
+            if hasattr(parent, "refresh_collection_tabs"):
+                parent.current_collection_id = collection_store.active_collection_id()
+                parent.refresh_collection_tabs()
             parent.display_emoji()
-        message_box.information(self, "导入完成", f"成功导入：{summary.imported} 个\n已存在跳过：{summary.skipped} 个\n失败：{summary.failed} 个")
+        message_box.information(self, "导入完成", f"成功导入：{summary.imported} 个\n已存在跳过：{summary.skipped} 个\n加入合集：{summary.added_to_collection} 个\n失败：{summary.failed} 个")
 
     def on_import_failed(self, message):
         self.cleanup_workers()

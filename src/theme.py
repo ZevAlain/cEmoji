@@ -99,8 +99,55 @@ def window_stylesheet(mode):
             width: 0;
             image: none;
         }}
+        QPushButton#CollectionButton {{
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 17px;
+            color: {color["muted"]};
+            min-height: 20px;
+            min-width: 44px;
+            padding: 6px 11px;
+        }}
+        QPushButton#CollectionButton:hover {{
+            background: {color["panel_alt"]};
+            border-color: {color["border"]};
+            color: {color["text"]};
+        }}
+        QPushButton#CollectionButton:checked {{
+            background: {color["accent_soft"]};
+            border-color: {color["accent"]};
+            color: {color["accent_hover"]};
+        }}
+        QPushButton#CompactButton {{
+            border-radius: 17px;
+            min-height: 20px;
+            min-width: 44px;
+            padding: 6px 11px;
+        }}
         QTabBar#EmojiFilterTabs {{
             background: transparent;
+        }}
+        QTabBar#CollectionTabs {{
+            background: transparent;
+        }}
+        QTabBar#CollectionTabs::tab {{
+            background: {color["panel"]};
+            border: 1px solid {color["border"]};
+            border-radius: 9px;
+            color: {color["muted"]};
+            margin-right: 6px;
+            padding: 7px 14px;
+            min-width: 54px;
+        }}
+        QTabBar#CollectionTabs::tab:hover {{
+            background: {color["panel_alt"]};
+            color: {color["text"]};
+            border-color: {color["border_strong"]};
+        }}
+        QTabBar#CollectionTabs::tab:selected {{
+            background: {color["accent_soft"]};
+            color: {color["accent_hover"]};
+            border-color: {color["accent"]};
         }}
         QTabBar#EmojiFilterTabs::tab {{
             background: {color["panel"]};
@@ -108,8 +155,8 @@ def window_stylesheet(mode):
             border-radius: 9px;
             color: {color["muted"]};
             margin-right: 6px;
-            padding: 7px 18px;
-            min-width: 92px;
+            padding: 6px 12px;
+            min-width: 52px;
         }}
         QTabBar#EmojiFilterTabs::tab:hover {{
             background: {color["panel_alt"]};
@@ -160,6 +207,11 @@ def window_stylesheet(mode):
         QLineEdit::placeholder {{
             color: {color["muted"]};
         }}
+        QLineEdit#SearchBar {{
+            border-radius: 17px;
+            min-height: 20px;
+            padding: 6px 11px;
+        }}
         QCheckBox {{
             background: transparent;
             color: {color["text"]};
@@ -175,6 +227,26 @@ def window_stylesheet(mode):
         QCheckBox::indicator:checked {{
             background: {color["accent"]};
             border-color: {color["accent"]};
+        }}
+        QRadioButton {{
+            background: transparent;
+            color: {color["text"]};
+            spacing: 8px;
+        }}
+        QRadioButton::indicator {{
+            width: 14px;
+            height: 14px;
+            border-radius: 7px;
+            border: 1px solid {color["border_strong"]};
+            background: transparent;
+        }}
+        QRadioButton::indicator:hover {{
+            border-color: {color["accent"]};
+            background: {color["accent_soft"]};
+        }}
+        QRadioButton::indicator:checked {{
+            border: 4px solid {color["accent"]};
+            background: {color["panel_solid"]};
         }}
         QLabel {{
             background: transparent;

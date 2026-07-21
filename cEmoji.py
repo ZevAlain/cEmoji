@@ -11,7 +11,7 @@ import tempfile
 from PySide6 import __version__ as PYSIDE_VERSION
 from PySide6.QtCore import QEvent, QLockFile, QTimer, Qt, QUrl, qVersion
 from PySide6.QtGui import QAction, QDesktopServices, QIcon, QKeySequence, QPixmapCache
-from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
+from PySide6.QtNetwork import QLocalServer, QLocalSocket, QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -36,10 +36,12 @@ import my_icon
 import version
 import src.cEmojiWidgets as cEmojiWidgets
 from src import emoji_store
+from src import collection_store
 from src.app_paths import ensure_app_dirs
 from src.config_service import ConfigService
 from src import message_box
 from src import theme
+from src.window_effects import apply_modern_window_effects
 
 
 HWND_TOPMOST = -1
@@ -59,6 +61,7 @@ OFFICIAL_SITE_URL = "https://zevalain.github.io/cEmoji/"
 LATEST_RELEASE_URL = "https://github.com/ZevAlain/cEmoji/releases/latest"
 UPDATE_LINK_TEXT = '<a href="check-update">检查更新</a>'
 UPDATE_CHECKING_TEXT = '<span style="color: gray;">检查中...</span>'
+LOCAL_SERVER_NAME = "cEmoji-single-instance"
 
 
 if sys.platform == "win32":
@@ -134,6 +137,63 @@ def configure_app_font(app):
     app.setFont(font)
 
 
+class CollectionNameButton(QPushButton):
+    def __init__(self, text="", parent=None):
+        super().__init__(parent)
+        self.full_text = ""
+        self.scroll_index = 0
+        self.scroll_timer = QTimer(self)
+        self.scroll_timer.setInterval(220)
+        self.scroll_timer.timeout.connect(self.scroll_text)
+        self.set_full_text(text)
+
+    def set_full_text(self, text):
+        self.full_text = str(text)
+        self.setToolTip(self.full_text)
+        self.stop_scroll()
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        if self.needs_scroll():
+            self.scroll_index = 0
+            self.scroll_timer.start()
+            self.scroll_text()
+
+    def leaveEvent(self, event):
+        self.stop_scroll()
+        super().leaveEvent(event)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if not self.scroll_timer.isActive():
+            self.update_elided_text()
+
+    def needs_scroll(self):
+        available_width = max(12, self.width() - 28)
+        return self.fontMetrics().horizontalAdvance(self.full_text) > available_width
+
+    def stop_scroll(self):
+        self.scroll_timer.stop()
+        self.scroll_index = 0
+        self.update_elided_text()
+
+    def update_elided_text(self):
+        available_width = max(12, self.width() - 28)
+        self.setText(self.fontMetrics().elidedText(self.full_text, Qt.TextElideMode.ElideRight, available_width))
+
+    def scroll_text(self):
+        if not self.needs_scroll():
+            self.stop_scroll()
+            return
+        padded_text = f"{self.full_text}   {self.full_text}"
+        visible_text = padded_text[self.scroll_index:] + padded_text[:self.scroll_index]
+        available_width = max(12, self.width() - 28)
+        while visible_text and self.fontMetrics().horizontalAdvance(visible_text) > available_width:
+            visible_text = visible_text[:-1]
+        self.setText(visible_text or self.full_text[:1])
+        self.scroll_index = (self.scroll_index + 1) % (len(self.full_text) + 3)
+
+
 class ImageViewer(QWidget):
     def __init__(self):
         super().__init__()
@@ -144,6 +204,8 @@ class ImageViewer(QWidget):
         self.app_config = self.config_service.load()
         self._tmp_icon_path = None
         self._exiting = False
+        self._tray_close_hint_shown = False
+        self._local_server = None
         self._hotkey_registered = False
         self._update_reply = None
         self.update_manager = QNetworkAccessManager(self)
@@ -154,6 +216,7 @@ class ImageViewer(QWidget):
         self.emoji_filter = "static"
         self.emoji_sort_mode = "time"
         self.emoji_sort_order = "desc"
+        self.current_collection_id = collection_store.active_collection_id()
 
         self.setWindowTitle("cEmoji")
         self.setFixedSize(500, 690)
@@ -167,9 +230,10 @@ class ImageViewer(QWidget):
         self.setLayout(self.main_layout)
 
         self.setup_tray(icon)
+        self.setup_local_server()
         self.setup_search()
+        self.setup_top_bar()
         self.setup_filter_tabs()
-        self.setup_buttons()
         self.setup_emoji_view()
         self.setup_footer()
         self.apply_system_theme()
@@ -207,46 +271,200 @@ class ImageViewer(QWidget):
         self.tray_icon.setContextMenu(self.tray_icon_menu)
         self.tray_icon.setToolTip("cEmoji")
         self.tray_icon.activated.connect(self.on_tray_icon_activated)
+        self.tray_icon.show()
+
+    def setup_local_server(self):
+        QLocalServer.removeServer(LOCAL_SERVER_NAME)
+        self._local_server = QLocalServer(self)
+        self._local_server.newConnection.connect(self.on_local_server_connection)
+        self._local_server.listen(LOCAL_SERVER_NAME)
+
+    def on_local_server_connection(self):
+        while self._local_server and self._local_server.hasPendingConnections():
+            connection = self._local_server.nextPendingConnection()
+            connection.readyRead.connect(connection.deleteLater)
+            connection.disconnected.connect(connection.deleteLater)
+        self.show_main_window()
+
+    def setup_top_bar(self):
+        self.top_bar_layout = QHBoxLayout()
+        self.top_bar_layout.setSpacing(6)
+        self.main_layout.addLayout(self.top_bar_layout)
+        self.setup_collection_tabs()
+        self.top_bar_layout.addStretch(1)
+        self.setup_buttons()
 
     def setup_buttons(self):
-        self.buttons_layout = QHBoxLayout()
-        self.main_layout.addLayout(self.buttons_layout)
-
-        self.always_on_top_button = QPushButton("始终置顶")
-        self.always_on_top_button.setCheckable(True)
         self.upload_button = QPushButton("上传")
+        self.upload_button.setObjectName("CompactButton")
         self.manage_button = QPushButton("管理")
+        self.manage_button.setObjectName("CompactButton")
         self.manage_button.setCheckable(True)
-        self.more_button = QPushButton("更多")
+        self.more_button = QPushButton("菜单")
+        self.more_button.setObjectName("CompactButton")
         self.more_menu = QMenu(self)
+        self.always_on_top_action = QAction("始终置顶", self)
+        self.always_on_top_action.setCheckable(True)
         self.about_action = QAction("关于", self)
         self.cloud_library_action = QAction("云端表情包库", self)
-        self.export_action = QAction("导出所有表情包", self)
-        self.clear_action = QAction("清空所有表情包", self)
+        self.export_current_action = QAction("导出当前合集", self)
+        self.export_all_action = QAction("导出所有表情包", self)
+        self.clear_current_action = QAction("清空当前合集", self)
+        self.clear_all_action = QAction("清空所有表情包", self)
+        self.more_menu.addAction(self.always_on_top_action)
+        self.more_menu.addSeparator()
         self.more_menu.addAction(self.about_action)
         self.more_menu.addSeparator()
         self.more_menu.addAction(self.cloud_library_action)
-        self.more_menu.addAction(self.export_action)
-        self.more_menu.addAction(self.clear_action)
+        self.more_menu.addSeparator()
+        self.more_menu.addAction(self.export_current_action)
+        self.more_menu.addAction(self.export_all_action)
+        self.more_menu.addSeparator()
+        self.more_menu.addAction(self.clear_current_action)
+        self.more_menu.addAction(self.clear_all_action)
         self.more_button.setMenu(self.more_menu)
 
-        for button in (self.always_on_top_button, self.upload_button, self.manage_button, self.more_button):
-            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            self.buttons_layout.addWidget(button)
+        for button in (self.upload_button, self.manage_button, self.more_button):
+            button.setFixedHeight(34)
+            self.top_bar_layout.addWidget(button)
 
-        self.always_on_top_button.clicked.connect(self.toggle_always_on_top)
+        self.always_on_top_action.triggered.connect(self.toggle_always_on_top)
         self.upload_button.clicked.connect(self.show_upload_dialog)
         self.manage_button.clicked.connect(self.show_manage_dialog)
         self.about_action.triggered.connect(self.show_about_dialog)
         self.cloud_library_action.triggered.connect(self.show_cloud_library)
-        self.export_action.triggered.connect(self.export_all_emojis)
-        self.clear_action.triggered.connect(self.clear_all_emojis)
+        self.export_current_action.triggered.connect(self.export_current_collection)
+        self.export_all_action.triggered.connect(self.export_all_emojis)
+        self.clear_current_action.triggered.connect(self.clear_current_collection)
+        self.clear_all_action.triggered.connect(self.clear_all_emojis)
 
     def setup_search(self):
         self.search_bar = QLineEdit(self)
+        self.search_bar.setObjectName("SearchBar")
         self.search_bar.textChanged.connect(self.schedule_display_emoji)
         self.update_search_placeholder()
-        self.main_layout.addWidget(self.search_bar)
+
+    def setup_collection_tabs(self):
+        self.secondary_collection_id = None
+        self.local_collection_button = QPushButton(collection_store.DEFAULT_COLLECTION_NAME, self)
+        self.local_collection_button.setObjectName("CollectionButton")
+        self.local_collection_button.setCheckable(True)
+        self.local_collection_button.setFixedHeight(34)
+        self.local_collection_button.setFixedWidth(76)
+        self.local_collection_button.clicked.connect(lambda: self.select_collection(collection_store.DEFAULT_COLLECTION_ID))
+        self.local_collection_button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.local_collection_button.customContextMenuRequested.connect(lambda position: self.show_collection_actions_menu(collection_store.DEFAULT_COLLECTION_ID, self.local_collection_button.mapToGlobal(position)))
+        self.top_bar_layout.addWidget(self.local_collection_button)
+
+        self.secondary_collection_button = QPushButton(self)
+        self.secondary_collection_button.setObjectName("CollectionButton")
+        self.secondary_collection_button.setCheckable(True)
+        self.secondary_collection_button.setFixedHeight(34)
+        self.secondary_collection_button.setFixedWidth(126)
+        self.secondary_collection_button.clicked.connect(lambda: self.select_collection(self.secondary_collection_id))
+        self.secondary_collection_button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.secondary_collection_button.customContextMenuRequested.connect(lambda position: self.show_collection_actions_menu(self.secondary_collection_id, self.secondary_collection_button.mapToGlobal(position)))
+        self.top_bar_layout.addWidget(self.secondary_collection_button)
+
+        self.collection_more_button = QPushButton("更多", self)
+        self.collection_more_button.setObjectName("CollectionButton")
+        self.collection_more_button.setFixedHeight(34)
+        self.collection_more_button.setFixedWidth(64)
+        self.collection_more_menu = QMenu(self)
+        self.collection_more_button.setMenu(self.collection_more_menu)
+        self.top_bar_layout.addWidget(self.collection_more_button)
+        self.refresh_collection_tabs()
+
+    def refresh_collection_tabs(self):
+        collections = collection_store.collections()
+        active_id = self.current_collection_id if collection_store.set_active_collection(self.current_collection_id) else collection_store.active_collection_id()
+        self.current_collection_id = active_id
+        non_local = [collection for collection in collections if collection.id != collection_store.DEFAULT_COLLECTION_ID]
+        if active_id != collection_store.DEFAULT_COLLECTION_ID:
+            self.secondary_collection_id = active_id
+        elif self.secondary_collection_id not in {collection.id for collection in non_local}:
+            self.secondary_collection_id = non_local[0].id if non_local else None
+
+        self.local_collection_button.setText(collection_store.DEFAULT_COLLECTION_NAME)
+        self.local_collection_button.setChecked(active_id == collection_store.DEFAULT_COLLECTION_ID)
+        secondary = next((collection for collection in non_local if collection.id == self.secondary_collection_id), None)
+        self.secondary_collection_button.setVisible(secondary is not None)
+        if secondary is not None:
+            self.secondary_collection_button.setText(secondary.name)
+            self.secondary_collection_button.setChecked(active_id == secondary.id)
+
+        self.collection_more_menu.clear()
+        for collection in collections:
+            action = QAction(collection.name, self)
+            action.setCheckable(True)
+            action.setChecked(collection.id == active_id)
+            action.triggered.connect(lambda _checked=False, collection_id=collection.id: self.select_collection(collection_id))
+            self.collection_more_menu.addAction(action)
+        self.collection_more_menu.addSeparator()
+        self.collection_more_menu.addAction("新建合集", self.create_collection)
+
+    def create_collection(self):
+        from PySide6.QtWidgets import QInputDialog
+
+        name, accepted = QInputDialog.getText(self, "新建合集", "合集名称：")
+        if not accepted:
+            return
+        name = name.strip()
+        if not name:
+            return
+        self.current_collection_id = collection_store.create_collection(name)
+        self.refresh_collection_tabs()
+        self.display_emoji()
+
+    def show_collection_actions_menu(self, collection_id, global_position):
+        if not collection_id:
+            return
+        menu = QMenu(self)
+        rename_action = QAction("重命名合集", self)
+        delete_action = QAction("删除合集", self)
+        menu.addAction(rename_action)
+        if collection_id != collection_store.DEFAULT_COLLECTION_ID:
+            menu.addAction(delete_action)
+        action = menu.exec(global_position)
+        if action == rename_action:
+            self.rename_collection(collection_id)
+        elif action == delete_action:
+            self.delete_collection(collection_id)
+
+    def rename_collection(self, collection_id):
+        from PySide6.QtWidgets import QInputDialog
+
+        current_name = collection_store.collection_name(collection_id)
+        name, accepted = QInputDialog.getText(self, "重命名合集", "合集名称：", text=current_name)
+        if not accepted:
+            return
+        if not collection_store.rename_collection(collection_id, name):
+            message_box.warning(self, "重命名失败", "合集名称不能为空，或已存在同名合集")
+            return
+        self.refresh_collection_tabs()
+
+    def delete_collection(self, collection_id):
+        name = collection_store.collection_name(collection_id)
+        filenames = collection_store.filenames_for_collection(collection_id)
+        if not filenames:
+            if not message_box.question(self, "删除合集", f"确定要删除合集“{name}”吗？"):
+                return
+        else:
+            if not message_box.question(self, "删除合集", f"确定要删除合集“{name}”吗？\n独占表情会删除本地文件，属于其他合集的表情只会移除合集关系。"):
+                return
+        emoji_store.clear_collection_emojis(collection_id)
+        collection_store.delete_collection(collection_id)
+        self.current_collection_id = collection_store.active_collection_id()
+        self.refresh_collection_tabs()
+        self.display_emoji()
+
+    def select_collection(self, collection_id):
+        if not collection_id:
+            return
+        self.current_collection_id = collection_id
+        collection_store.set_active_collection(collection_id)
+        self.refresh_collection_tabs()
+        self.display_emoji()
 
     def setup_filter_tabs(self):
         self.filter_bar_layout = QHBoxLayout()
@@ -257,9 +475,11 @@ class ImageViewer(QWidget):
         self.filter_tabs.setObjectName("EmojiFilterTabs")
         self.filter_tabs.setDrawBase(False)
         self.filter_tabs.addTab("表情包")
-        self.filter_tabs.addTab("动态表情包")
+        self.filter_tabs.addTab("GIF")
         self.filter_tabs.currentChanged.connect(self.on_filter_tab_changed)
-        self.filter_bar_layout.addWidget(self.filter_tabs, stretch=1)
+        self.filter_bar_layout.addWidget(self.filter_tabs)
+
+        self.filter_bar_layout.addWidget(self.search_bar, stretch=1)
 
         self.sort_button = QToolButton(self)
         self.sort_button.setObjectName("SortButton")
@@ -481,20 +701,27 @@ class ImageViewer(QWidget):
             QDesktopServices.openUrl(QUrl(release.get("html_url", OFFICIAL_SITE_URL)))
 
     def closeEvent(self, event):
-        self._exiting = True
-        self.cleanup()
-        event.accept()
+        if self._exiting:
+            self.cleanup()
+            event.accept()
+            return
+
+        event.ignore()
+        self.hide_to_tray(show_hint=True)
 
     def changeEvent(self, event):
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange and self.isMinimized() and not self._exiting:
             QTimer.singleShot(0, self.hide_to_tray)
 
-    def hide_to_tray(self):
+    def hide_to_tray(self, show_hint=False):
         if self._exiting:
             return
         self.hide()
         self.tray_icon.show()
+        if show_hint and not self._tray_close_hint_shown and self.tray_icon.supportsMessages():
+            self.tray_icon.showMessage("cEmoji", "cEmoji 已最小化到托盘，可从托盘菜单退出。", QSystemTrayIcon.MessageIcon.Information, 2500)
+            self._tray_close_hint_shown = True
 
     def on_exit(self):
         self._exiting = True
@@ -503,6 +730,10 @@ class ImageViewer(QWidget):
 
     def cleanup(self):
         self.unregister_hotkey()
+        if self._local_server is not None:
+            self._local_server.close()
+            QLocalServer.removeServer(LOCAL_SERVER_NAME)
+            self._local_server = None
         if hasattr(self, "tray_icon"):
             self.tray_icon.hide()
         if self._tmp_icon_path and os.path.exists(self._tmp_icon_path):
@@ -527,11 +758,11 @@ class ImageViewer(QWidget):
         self.show_main_window()
 
     def toggle_always_on_top(self):
-        enabled = self.always_on_top_button.isChecked()
+        enabled = self.always_on_top_action.isChecked()
         try:
             set_window_topmost(self, enabled)
         except OSError as error:
-            self.always_on_top_button.setChecked(not enabled)
+            self.always_on_top_action.setChecked(not enabled)
             message_box.warning(self, "置顶失败", str(error))
 
     def show_upload_dialog(self):
@@ -567,14 +798,25 @@ class ImageViewer(QWidget):
     def save_hide_after_copy(self, checked):
         self.set_config_value("hide_after_copy", checked)
 
+    def export_current_collection(self):
+        self.export_emojis(collection_id=self.current_collection_id, scope_name=collection_store.collection_name(self.current_collection_id), title="导出当前合集")
+
     def export_all_emojis(self):
-        if emoji_store.count_emojis() == 0:
+        self.export_emojis(collection_id=None, scope_name="全部表情包", title="导出所有表情包")
+
+    def export_emojis(self, collection_id, scope_name, title):
+        if collection_id is None:
+            has_items = emoji_store.count_emojis() > 0
+        else:
+            has_items = bool(collection_store.filenames_for_collection(collection_id))
+        if not has_items:
             message_box.information(self, "导出表情包", "当前没有可导出的表情包")
             return
 
-        default_name = f"cEmoji_emojis_{datetime.now():%Y%m%d_%H%M%S}.zip"
+        safe_scope = re.sub(r"[\\/:*?\"<>|]+", "_", scope_name).strip() or "emojis"
+        default_name = f"cEmoji_{safe_scope}_{datetime.now():%Y%m%d_%H%M%S}.zip"
         default_path = Path.home() / default_name
-        archive_path, _ = QFileDialog.getSaveFileName(self, "导出所有表情包", str(default_path), "ZIP files (*.zip)")
+        archive_path, _ = QFileDialog.getSaveFileName(self, title, str(default_path), "ZIP files (*.zip)")
         if not archive_path:
             return
 
@@ -583,7 +825,7 @@ class ImageViewer(QWidget):
             archive_path = archive_path.with_suffix(".zip")
 
         try:
-            exported = emoji_store.export_emojis(archive_path)
+            exported = emoji_store.export_emojis(archive_path, collection_id)
         except OSError as error:
             message_box.warning(self, "导出失败", str(error))
             return
@@ -593,6 +835,19 @@ class ImageViewer(QWidget):
             return
 
         message_box.information(self, "导出完成", f"已导出 {exported} 个表情包到：\n{archive_path}")
+
+    def clear_current_collection(self):
+        name = collection_store.collection_name(self.current_collection_id)
+        count = len(collection_store.filenames_for_collection(self.current_collection_id))
+        if count == 0:
+            message_box.information(self, "清空合集", "当前合集没有表情包")
+            return
+        if not message_box.question(self, "确认清空", f"确定要清空当前合集“{name}”中的 {count} 个表情包吗？\n属于其他合集的表情只会从当前合集移除。"):
+            return
+
+        removed_files, removed_from_collection = emoji_store.clear_collection_emojis(self.current_collection_id)
+        self.display_emoji()
+        message_box.information(self, "清空完成", f"已删除 {removed_files} 个本地文件\n已从当前合集移除 {removed_from_collection} 个共享表情")
 
     def clear_all_emojis(self):
         if not message_box.question(self, "确认清空", "确定要清空全部表情包吗？"):
@@ -656,6 +911,7 @@ class ImageViewer(QWidget):
         resolved_mode = theme.system_theme_mode(QApplication.palette())
         self.setStyleSheet(theme.window_stylesheet(resolved_mode))
         self.emoji_view.apply_theme(resolved_mode)
+        apply_modern_window_effects(self, resolved_mode)
 
     def display_emoji(self):
         search_text = self.search_bar.text()
@@ -673,7 +929,7 @@ class ImageViewer(QWidget):
         self.update_search_placeholder()
 
     def filtered_emojis(self, search_text=""):
-        image_paths = emoji_store.list_emojis(search_text)
+        image_paths = emoji_store.list_emojis(search_text, self.current_collection_id)
         if self.emoji_filter == "animated":
             return self.sorted_emojis([path for path in image_paths if path.suffix.lower() == ".gif"])
 
@@ -742,13 +998,27 @@ class ImageViewer(QWidget):
         self.search_bar.setPlaceholderText(search_message)
 
 
+def notify_existing_instance():
+    socket = QLocalSocket()
+    socket.connectToServer(LOCAL_SERVER_NAME)
+    if not socket.waitForConnected(800):
+        return False
+    socket.write(b"show")
+    socket.flush()
+    socket.waitForBytesWritten(800)
+    socket.disconnectFromServer()
+    return True
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     configure_app_font(app)
     QPixmapCache.setCacheLimit(65536)
     lock = QLockFile(str(Path(tempfile.gettempdir()) / "cEmoji.lock"))
     if not lock.tryLock(100):
-        message_box.information(None, "提示", "cEmoji 已经在运行中")
+        if not notify_existing_instance():
+            message_box.information(None, "提示", "cEmoji 已经在运行中")
         sys.exit(0)
 
     try:

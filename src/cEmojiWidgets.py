@@ -4,7 +4,7 @@ from PySide6.QtCore import QAbstractListModel, QEvent, QMimeData, QModelIndex, Q
 from PySide6.QtGui import QAction, QColor, QMovie, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QInputDialog, QListView, QMenu, QStyle, QStyledItemDelegate, QToolTip
 
-from src import emoji_store
+from src import collection_store, emoji_store
 from src import message_box
 from src import theme
 
@@ -250,11 +250,13 @@ class EmojiListWidget(QListView):
         pin_action = QAction("取消置顶" if pinned else "置顶", self)
         rename_action = QAction("重命名", self)
         show_file_action = QAction("打开文件位置", self)
-        delete_action = QAction("删除", self)
+        remove_action = QAction("从当前合集移除", self)
+        delete_action = QAction("删除本地文件", self)
         menu.addAction(pin_action)
         menu.addAction(rename_action)
         menu.addAction(show_file_action)
         menu.addSeparator()
+        menu.addAction(remove_action)
         menu.addAction(delete_action)
         action = menu.exec(self.mapToGlobal(position))
         if action == pin_action:
@@ -263,6 +265,8 @@ class EmojiListWidget(QListView):
             self.rename_item(filename)
         elif action == show_file_action:
             self.open_file_location(filename)
+        elif action == remove_action:
+            self.remove_from_current_collection(filename, confirm=True)
         elif action == delete_action:
             self.delete_item(filename, confirm=True)
 
@@ -357,7 +361,7 @@ class EmojiListWidget(QListView):
             if self.manage_mode:
                 filename = self.emoji_model.filename_at(index)
                 if filename is not None and delete_button_rect(self.visualRect(index)).contains(event.position().toPoint()):
-                    self.delete_item(filename, confirm=False)
+                    self.remove_from_current_collection(filename, confirm=False)
                     return
 
         super().mousePressEvent(event)
@@ -369,14 +373,28 @@ class EmojiListWidget(QListView):
             filename = self.emoji_model.filename_at(index)
             button_rect = delete_button_rect(self.visualRect(index))
             if filename is not None and button_rect.contains(position):
-                QToolTip.showText(event.globalPos(), "删除", self.viewport(), button_rect)
+                QToolTip.showText(event.globalPos(), "从当前合集移除", self.viewport(), button_rect)
                 return True
 
         return super().viewportEvent(event)
 
+    def current_collection_id(self):
+        parent = self.parent()
+        return getattr(parent, "current_collection_id", collection_store.active_collection_id())
+
+    def remove_from_current_collection(self, filename, confirm):
+        if confirm:
+            if not message_box.question(self, "移除表情", "从当前合集移除这个表情吗？本地文件不会被删除。"):
+                return
+
+        if collection_store.remove_file_from_collection(filename, self.current_collection_id()):
+            self.emoji_deleted.emit()
+            return
+        message_box.warning(self, "无法移除", "这个表情只在当前合集里，不能移除到无所属状态。你可以选择删除本地文件。")
+
     def delete_item(self, filename, confirm):
         if confirm:
-            if not message_box.question(self, "确认删除", "你确定要删除这个表情吗？"):
+            if not message_box.question(self, "确认删除", "确定要删除这个本地表情文件吗？它会从所有合集里移除。"):
                 return
 
         if emoji_store.delete_emoji(filename):

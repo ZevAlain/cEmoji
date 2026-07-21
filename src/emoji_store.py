@@ -7,6 +7,7 @@ import tempfile
 import zipfile
 
 from src.app_paths import EMOJI_DIR, EMOJI_SMALL_DIR, PINNED_FILE, ensure_app_dirs
+from src import collection_store
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif"}
@@ -20,22 +21,26 @@ class ImportSummary:
     imported: int = 0
     skipped: int = 0
     failed: int = 0
+    added_to_collection: int = 0
 
     def add(self, other):
         self.imported += other.imported
         self.skipped += other.skipped
         self.failed += other.failed
+        self.added_to_collection += other.added_to_collection
 
 
 def count_emojis():
     return len(get_emoji_index())
 
 
-def list_emojis(search_text=""):
+def list_emojis(search_text="", collection_id=None):
     query = search_text.lower()
+    collection_names = collection_store.filenames_for_collection(collection_id)
+    paths = [path for path in get_emoji_index() if display_name_for_thumbnail(path) in collection_names]
     if not query:
-        return list(get_emoji_index())
-    return [path for path in get_emoji_index() if query in display_title_for_thumbnail(path).lower()]
+        return paths
+    return [path for path in paths if query in display_title_for_thumbnail(path).lower()]
 
 
 def refresh_index():
@@ -60,7 +65,7 @@ def get_emoji_index():
     return _emoji_index
 
 
-def import_images(filenames, progress_callback=None):
+def import_images(filenames, progress_callback=None, collection_id=None):
     summary = ImportSummary()
     candidates = list(filenames)
     total = len(candidates)
@@ -77,10 +82,19 @@ def import_images(filenames, progress_callback=None):
         except Exception:
             summary.failed += 1
         else:
-            if result == "imported":
+            result_status, result_name = result
+            if result_status == "imported":
                 summary.imported += 1
-            elif result == "skipped":
+                collection_store.add_file_to_collection(result_name, collection_id)
+                summary.added_to_collection += 1
+            elif result_status == "skipped":
                 summary.skipped += 1
+                if result_name:
+                    before = set(collection_store.file_collection_ids(result_name))
+                    collection_store.add_file_to_collection(result_name, collection_id)
+                    after = set(collection_store.file_collection_ids(result_name))
+                    if after != before:
+                        summary.added_to_collection += 1
             else:
                 summary.failed += 1
         if progress_callback is not None:
@@ -90,7 +104,7 @@ def import_images(filenames, progress_callback=None):
     return summary
 
 
-def import_zip_files(filenames, progress_callback=None):
+def import_zip_files(filenames, progress_callback=None, collection_id=None):
     summary = ImportSummary()
     candidates = list(filenames)
     total = _count_zip_image_entries(candidates)
@@ -113,7 +127,7 @@ def import_zip_files(filenames, progress_callback=None):
                     if progress_callback is not None:
                         progress_callback(completed + current, total, inner_filename)
 
-                summary.add(import_images(image_paths, zip_progress))
+                summary.add(import_images(image_paths, zip_progress, collection_id))
                 completed += len(image_paths)
                 if progress_callback is not None:
                     progress_callback(completed, total, archive_path.name)
@@ -124,17 +138,22 @@ def import_zip_files(filenames, progress_callback=None):
     return summary
 
 
-def import_clipboard_image(image, filename):
+def import_clipboard_image(image, filename, collection_id=None):
     ensure_app_dirs()
     destination = EMOJI_DIR / filename
     if destination.exists():
+        collection_store.add_file_to_collection(filename, collection_id)
         return False
-    if _pil_image_hash(image) in _existing_image_hashes():
+    image_hash = _pil_image_hash(image)
+    existing = find_existing_image_by_hash(image_hash)
+    if existing is not None:
+        collection_store.add_file_to_collection(existing.name, collection_id)
         return False
     destination.parent.mkdir(parents=True, exist_ok=True)
     EMOJI_SMALL_DIR.mkdir(parents=True, exist_ok=True)
     image.save(destination, "PNG")
     create_thumbnail(destination, EMOJI_SMALL_DIR / filename)
+    collection_store.add_file_to_collection(filename, collection_id)
     refresh_index()
     return True
 
@@ -147,6 +166,7 @@ def delete_emoji(filename):
             path.unlink()
             removed = True
     if removed:
+        collection_store.remove_file(filename)
         set_pinned(filename, False)
         refresh_index()
     return removed
@@ -198,6 +218,7 @@ def rename_emoji(filename, new_filename):
         pinned_names.add(new_filename)
         _save_pinned_names(pinned_names)
 
+    collection_store.rename_file(filename, new_filename)
     refresh_index()
     return True, new_filename
 
@@ -215,13 +236,33 @@ def clear_emojis():
                 except OSError:
                     pass
     _save_pinned_names(set())
+    collection_store.clear_all_items()
     refresh_index()
     return removed
 
 
-def export_emojis(archive_path):
+def clear_collection_emojis(collection_id):
+    filenames = list(collection_store.filenames_for_collection(collection_id))
+    removed_files = 0
+    removed_from_collection = 0
+    for filename in filenames:
+        collection_ids = collection_store.file_collection_ids(filename)
+        if len(collection_ids) > 1:
+            if collection_store.remove_file_from_collection(filename, collection_id):
+                removed_from_collection += 1
+        elif delete_emoji(filename):
+            removed_files += 1
+    refresh_index()
+    return removed_files, removed_from_collection
+
+
+def export_emojis(archive_path, collection_id=None):
     ensure_app_dirs()
-    image_paths = sorted(path for path in EMOJI_DIR.iterdir() if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES)
+    if collection_id is None:
+        image_paths = sorted(path for path in EMOJI_DIR.iterdir() if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES)
+    else:
+        filenames = collection_store.filenames_for_collection(collection_id)
+        image_paths = sorted(EMOJI_DIR / filename for filename in filenames if (EMOJI_DIR / filename).is_file())
     if not image_paths:
         return 0
 
@@ -239,6 +280,26 @@ def existing_image_hashes():
 
 def image_content_hash(path):
     return _image_content_hash(Path(path))
+
+
+def find_existing_image_by_content(source):
+    try:
+        return find_existing_image_by_hash(_image_content_hash(source))
+    except OSError:
+        return None
+
+
+def find_existing_image_by_hash(content_hash):
+    ensure_app_dirs()
+    for path in EMOJI_DIR.iterdir():
+        if not path.is_file() or path.suffix.lower() not in IMAGE_SUFFIXES:
+            continue
+        try:
+            if _image_content_hash(path) == content_hash:
+                return path
+        except OSError:
+            continue
+    return None
 
 
 def original_image_path(filename):
@@ -300,20 +361,21 @@ def _import_image_file(source, known_hashes=None):
     destination_name = _readable_filename(source.name)
     destination = EMOJI_DIR / destination_name
     if destination.exists():
-        return "skipped"
+        return "skipped", destination_name
 
     source_hash = _image_content_hash(source)
     if known_hashes is None:
         known_hashes = _existing_image_hashes()
     if source_hash in known_hashes:
-        return "skipped"
+        existing = find_existing_image_by_hash(source_hash)
+        return "skipped", existing.name if existing is not None else ""
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     EMOJI_SMALL_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
     create_thumbnail(destination, EMOJI_SMALL_DIR / destination_name)
     known_hashes.add(source_hash)
-    return "imported"
+    return "imported", destination_name
 
 
 def _existing_image_hashes():
